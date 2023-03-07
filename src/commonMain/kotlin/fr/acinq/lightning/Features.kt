@@ -235,6 +235,13 @@ sealed class Feature {
         override val scopes: Set<FeatureScope> get() = setOf(FeatureScope.Init, FeatureScope.Node, FeatureScope.Invoice)
     }
 
+    @Serializable
+    object PhoenixSplices : Feature() {
+        override val rfcName get() = "phoenix_splices"
+        override val mandatory get() = 154
+        override val scopes: Set<FeatureScope> get() = setOf(FeatureScope.Init)
+    }
+
 }
 
 @Serializable

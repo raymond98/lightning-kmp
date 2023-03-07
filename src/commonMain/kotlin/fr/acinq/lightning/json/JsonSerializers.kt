@@ -57,6 +57,7 @@
     JsonSerializers.InteractiveTxParamsSerializer::class,
     JsonSerializers.SignedSharedTransactionSerializer::class,
     JsonSerializers.RbfStatusSerializer::class,
+    JsonSerializers.SpliceStatusSerializer::class,
     JsonSerializers.ChannelParamsSerializer::class,
     JsonSerializers.CommitmentChangesSerializer::class,
     JsonSerializers.LocalFundingStatusSerializer::class,
@@ -248,6 +249,9 @@ object JsonSerializers {
 
     @Serializer(forClass = WaitForFundingConfirmed.Companion.RbfStatus::class)
     object RbfStatusSerializer
+
+    @Serializer(forClass = Normal.Companion.SpliceStatus::class)
+    object SpliceStatusSerializer
 
     @Serializer(forClass = ChannelParams::class)
     object ChannelParamsSerializer

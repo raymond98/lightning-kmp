@@ -854,16 +854,14 @@ data class SpliceInit(
     override val type: Long get() = SpliceInit.type
     val requireConfirmedInputs: Boolean = tlvStream.get<ChannelTlv.RequireConfirmedInputsTlv>()?.let { true } ?: false
     val pushAmount: MilliSatoshi = tlvStream.get<ChannelTlv.PushAmountTlv>()?.amount ?: 0.msat
+    val channelOrigins: List<ChannelOrigin> = tlvStream.get<ChannelTlv.ChannelOriginsTlv>()?.channelOrigins ?: emptyList()
 
-    constructor(channelId: ByteVector32, fundingAmount: Satoshi, lockTime: Long, feerate: FeeratePerKw, pushAmount: MilliSatoshi, requireConfirmedInputs: Boolean) : this(
+    constructor(channelId: ByteVector32, fundingAmount: Satoshi, lockTime: Long, feerate: FeeratePerKw, pushAmount: MilliSatoshi) : this(
         channelId,
         fundingAmount,
         lockTime,
         feerate,
-        TlvStream(buildList {
-            add(ChannelTlv.PushAmountTlv(pushAmount))
-            if (requireConfirmedInputs) add(ChannelTlv.RequireConfirmedInputsTlv)
-        })
+        TlvStream(listOf(ChannelTlv.PushAmountTlv(pushAmount)))
     )
 
     override fun write(out: Output) {
@@ -881,6 +879,7 @@ data class SpliceInit(
         private val readers = mapOf(
             ChannelTlv.RequireConfirmedInputsTlv.tag to ChannelTlv.RequireConfirmedInputsTlv as TlvValueReader<ChannelTlv>,
             ChannelTlv.PushAmountTlv.tag to ChannelTlv.PushAmountTlv.Companion as TlvValueReader<ChannelTlv>,
+            ChannelTlv.ChannelOriginsTlv.tag to ChannelTlv.ChannelOriginsTlv.Companion as TlvValueReader<ChannelTlv>
         )
 
         override fun read(input: Input): SpliceInit = SpliceInit(
@@ -902,13 +901,10 @@ data class SpliceAck(
     val requireConfirmedInputs: Boolean = tlvStream.get<ChannelTlv.RequireConfirmedInputsTlv>()?.let { true } ?: false
     val pushAmount: MilliSatoshi = tlvStream.get<ChannelTlv.PushAmountTlv>()?.amount ?: 0.msat
 
-    constructor(channelId: ByteVector32, fundingAmount: Satoshi, pushAmount: MilliSatoshi, requireConfirmedInputs: Boolean) : this(
+    constructor(channelId: ByteVector32, fundingAmount: Satoshi, pushAmount: MilliSatoshi) : this(
         channelId,
         fundingAmount,
-        TlvStream(buildList {
-            add(ChannelTlv.PushAmountTlv(pushAmount))
-            if (requireConfirmedInputs) add(ChannelTlv.RequireConfirmedInputsTlv)
-        })
+        TlvStream(listOf(ChannelTlv.PushAmountTlv(pushAmount)))
     )
 
     override fun write(out: Output) {

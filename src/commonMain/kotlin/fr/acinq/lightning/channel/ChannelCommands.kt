@@ -3,12 +3,15 @@ package fr.acinq.lightning.channel
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Satoshi
+import fr.acinq.bitcoin.TxOut
 import fr.acinq.lightning.CltvExpiry
 import fr.acinq.lightning.MilliSatoshi
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.blockchain.fee.FeeratePerKw
 import fr.acinq.lightning.transactions.Transactions.weight2fee
 import fr.acinq.lightning.utils.UUID
+import fr.acinq.lightning.utils.msat
+import fr.acinq.lightning.utils.sat
 import fr.acinq.lightning.wire.FailureMessage
 import fr.acinq.lightning.wire.OnionRoutingPacket
 
@@ -34,6 +37,18 @@ data class CMD_UPDATE_FEE(val feerate: FeeratePerKw, val commit: Boolean = false
 
 // We only support a very limited fee bumping mechanism where all spendable utxos will be used (only used in tests).
 data class CMD_BUMP_FUNDING_FEE(val targetFeerate: FeeratePerKw, val fundingAmount: Satoshi, val wallet: WalletState, val lockTime: Long) : Command()
+
+data class SpliceIn(val wallet: WalletState, val additionalLocalFunding: Satoshi, val pushAmount: MilliSatoshi = 0.msat)
+data class SpliceOut(val amount: Satoshi, val scriptPubKey: ByteVector)
+data class CMD_SPLICE(val spliceIn: SpliceIn?, val spliceOut: SpliceOut?, val feerate: FeeratePerKw, val channelOrigins: List<ChannelOrigin> = emptyList()) : Command() {
+    init {
+        require(spliceIn != null || spliceOut != null) { "there must be a splice-in or a splice-out" }
+    }
+
+    val additionalLocalFunding: Satoshi = spliceIn?.additionalLocalFunding ?: 0.sat
+    val pushAmount: MilliSatoshi = spliceIn?.pushAmount ?: 0.msat
+    val spliceOutputs: List<TxOut> = spliceOut?.let { listOf(TxOut(it.amount, it.scriptPubKey)) } ?: emptyList()
+}
 
 data class ClosingFees(val preferred: Satoshi, val min: Satoshi, val max: Satoshi) {
     constructor(preferred: Satoshi) : this(preferred, preferred, preferred)

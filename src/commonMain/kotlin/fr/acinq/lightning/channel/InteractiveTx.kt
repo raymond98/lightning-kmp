@@ -21,12 +21,23 @@ sealed class SharedFundingInput {
     abstract fun sign(keyManager: KeyManager, localParams: LocalParams, tx: Transaction): ByteVector64
 
     data class Multisig2of2(override val info: Transactions.InputInfo, val localFundingPubkey: PublicKey, val remoteFundingPubkey: PublicKey) : SharedFundingInput() {
+
+        constructor(keyManager: KeyManager, params: ChannelParams, commitment: Commitment) : this(
+            info = commitment.commitInput,
+            localFundingPubkey = keyManager.fundingPublicKey(params.localParams.fundingKeyPath).publicKey,
+            remoteFundingPubkey = params.remoteParams.fundingPubKey
+        )
+
         // This value was computed assuming 73 bytes signatures (worst-case scenario).
-        override val weight: Long = 388
+        override val weight: Long = Multisig2of2.weight
 
         override fun sign(keyManager: KeyManager, localParams: LocalParams, tx: Transaction): ByteVector64 {
             val fundingKey = keyManager.channelKeys(localParams.fundingKeyPath).fundingPrivateKey
             return keyManager.sign(Transactions.TransactionWithInputInfo.SpliceTx(info, tx), fundingKey)
+        }
+
+        companion object {
+            const val weight: Long = 388
         }
     }
 }
@@ -63,10 +74,39 @@ data class InteractiveTxParams(
     }
 
     val fundingAmount: Satoshi = localAmount + remoteAmount
+
     // BOLT 2: MUST set `feerate` greater than or equal to 25/24 times the `feerate` of the previously constructed transaction, rounded down.
     val minNextFeerate: FeeratePerKw = targetFeerate * 25 / 24
+
     // BOLT 2: the initiator's serial IDs MUST use even values and the non-initiator odd values.
     val serialIdParity = if (isInitiator) 0 else 1
+
+    companion object {
+        fun computeLocalContribution(isInitiator: Boolean, commitment: Commitment, spliceInAmount: Satoshi, spliceOut: List<TxOut>, targetFeerate: FeeratePerKw): Satoshi {
+            // If there is a splice-in, whatever the amount of the splice-in, fees will be paid for by bitcoind, when we call
+            // fundrawtransaction to pay the inputs. they won't change the contribution so we don't take them into account
+            val fees = if (spliceInAmount == 0.sat) {
+                val commonFieldsWeight = if (isInitiator) {
+                    val dummyTx = Transaction(
+                        version = 2,
+                        txIn = emptyList(), // NB: we add the weight manually
+                        txOut = listOf(commitment.commitInput.txOut), // we're taking the previous output, it has the wrong amount but we don't care: only the weight matters to compute fees
+                        lockTime = 0
+                    )
+                    dummyTx.weight() + SharedFundingInput.Multisig2of2.weight
+                } else 0
+                // TODO: use proper weight() method when it is released in bitcoin-kmp (https://github.com/ACINQ/bitcoin-kmp/pull/84)
+                val spliceOutputsWeight = 4 * spliceOut.sumOf { TxOut.write(it).size }
+                val weight = commonFieldsWeight + spliceOutputsWeight
+                Transactions.weight2fee(targetFeerate, weight.toInt())
+                0.sat
+            } else {
+                // if there is a splice-in, bitcoind will add fees when adding the input
+                0.sat
+            }
+            return commitment.localCommit.spec.toLocal.truncateToSatoshi() + spliceInAmount - spliceOut.map { it.amount }.sum() - fees
+        }
+    }
 }
 
 sealed class InteractiveTxInput {
@@ -81,11 +121,13 @@ sealed class InteractiveTxInput {
     data class Local(override val serialId: Long, val previousTx: Transaction, val previousTxOutput: Long, override val sequence: UInt) : InteractiveTxInput(), Outgoing {
         override val outPoint: OutPoint = OutPoint(previousTx, previousTxOutput)
     }
+
     /**
      * A remote-only input that funds the interactive transaction.
      * We only keep the data we need from our peer's TxAddInput to avoid storing potentially large messages in our DB.
      */
     data class Remote(override val serialId: Long, override val outPoint: OutPoint, val txOut: TxOut, override val sequence: UInt) : InteractiveTxInput(), Incoming
+
     /** The shared input can be added by us or by our peer, depending on who initiated the protocol. */
     data class Shared(override val serialId: Long, override val outPoint: OutPoint, override val sequence: UInt, val localAmount: Satoshi, val remoteAmount: Satoshi) : InteractiveTxInput(), Incoming, Outgoing
 }
@@ -103,11 +145,13 @@ sealed class InteractiveTxOutput {
         data class Change(override val serialId: Long, override val amount: Satoshi, override val pubkeyScript: ByteVector) : Local()
         data class NonChange(override val serialId: Long, override val amount: Satoshi, override val pubkeyScript: ByteVector) : Local()
     }
+
     /**
      * A remote-only output of the interactive transaction.
      * We only keep the data we need from our peer's TxAddOutput to avoid storing potentially large messages in our DB.
      */
     data class Remote(override val serialId: Long, override val amount: Satoshi, override val pubkeyScript: ByteVector) : InteractiveTxOutput(), Incoming
+
     /** The shared output can be added by us or by our peer, depending on who initiated the protocol. */
     data class Shared(override val serialId: Long, override val pubkeyScript: ByteVector, val localAmount: Satoshi, val remoteAmount: Satoshi) : InteractiveTxOutput(), Incoming, Outgoing {
         override val amount: Satoshi = localAmount + remoteAmount
