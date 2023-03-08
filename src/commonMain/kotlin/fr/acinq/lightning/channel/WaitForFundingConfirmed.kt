@@ -198,10 +198,11 @@ data class WaitForFundingConfirmed(
             }
             cmd is ChannelCommand.MessageReceived && cmd.message is CommitSig -> when (rbfStatus) {
                 is RbfStatus.WaitForCommitSig -> {
-                    val firstCommitmentRes = Helpers.Funding.receiveFirstCommit(
+                    val firstCommitmentRes = Helpers.Funding.receiveFirstCommitSig(
                         keyManager, rbfStatus.fundingParams, commitments.params.localParams, commitments.params.remoteParams,
-                        rbfStatus.fundingTx, rbfStatus.commitTx, cmd.message,
-                        commitments.latest.remoteCommit.remotePerCommitmentPoint,
+                        fundingTxIndex = 0, rbfStatus.fundingTx,
+                        commitmentIndex = 0, commitments.latest.remoteCommit.remotePerCommitmentPoint,
+                        rbfStatus.commitTx, remoteCommitSig = cmd.message,
                         currentBlockHeight.toLong()
                     )
                     when (firstCommitmentRes) {

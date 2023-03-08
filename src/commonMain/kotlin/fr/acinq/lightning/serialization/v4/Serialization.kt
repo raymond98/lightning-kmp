@@ -354,6 +354,7 @@ object Serialization {
     }
 
     private fun Output.writeCommitment(o: Commitment) = o.run {
+        writeNumber(fundingTxIndex)
         when (localFundingStatus) {
             is LocalFundingStatus.UnconfirmedFundingTx -> {
                 write(0x00)

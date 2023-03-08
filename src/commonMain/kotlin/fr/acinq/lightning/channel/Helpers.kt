@@ -352,20 +352,22 @@ object Helpers {
         object InvalidRemoteCommitSig : ReceiveFirstCommitResult()
         object FundingSigFailure : ReceiveFirstCommitResult()
 
-        fun receiveFirstCommit(
+        fun receiveFirstCommitSig(
             keyManager: KeyManager,
             fundingParams: InteractiveTxParams,
             localParams: LocalParams,
             remoteParams: RemoteParams,
+            fundingTxIndex: Long,
             fundingTx: SharedTransaction,
+            commitmentIndex: Long,
+            remotePerCommitmentPoint: PublicKey,
             firstCommitTx: FirstCommitTx,
-            remoteCommit: CommitSig,
-            remoteFirstPerCommitmentPoint: PublicKey,
+            remoteCommitSig: CommitSig,
             currentBlockHeight: Long,
         ): ReceiveFirstCommitResult {
             val fundingPubKey = localParams.channelKeys(keyManager).fundingPubKey
             val localSigOfLocalTx = keyManager.sign(firstCommitTx.localCommitTx, localParams.channelKeys(keyManager).fundingPrivateKey)
-            val signedLocalCommitTx = Transactions.addSigs(firstCommitTx.localCommitTx, fundingPubKey, remoteParams.fundingPubKey, localSigOfLocalTx, remoteCommit.signature)
+            val signedLocalCommitTx = Transactions.addSigs(firstCommitTx.localCommitTx, fundingPubKey, remoteParams.fundingPubKey, localSigOfLocalTx, remoteCommitSig.signature)
             return when (Transactions.checkSpendable(signedLocalCommitTx)) {
                 is Try.Failure -> InvalidRemoteCommitSig
                 is Try.Success -> {
@@ -373,10 +375,11 @@ object Helpers {
                         null -> FundingSigFailure
                         else -> {
                             val commitment = Commitment(
+                                fundingTxIndex = fundingTxIndex,
                                 LocalFundingStatus.UnconfirmedFundingTx(signedFundingTx, fundingParams, currentBlockHeight),
                                 RemoteFundingStatus.NotLocked,
-                                LocalCommit(0, firstCommitTx.localSpec, PublishableTxs(signedLocalCommitTx, listOf())),
-                                RemoteCommit(0, firstCommitTx.remoteSpec, firstCommitTx.remoteCommitTx.tx.txid, remoteFirstPerCommitmentPoint),
+                                LocalCommit(commitmentIndex, firstCommitTx.localSpec, PublishableTxs(signedLocalCommitTx, listOf())),
+                                RemoteCommit(commitmentIndex, firstCommitTx.remoteSpec, firstCommitTx.remoteCommitTx.tx.txid, remotePerCommitmentPoint),
                                 nextRemoteCommit = null
                             )
                             FirstCommitment(signedFundingTx, commitment)

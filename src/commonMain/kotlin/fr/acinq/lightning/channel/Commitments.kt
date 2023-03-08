@@ -116,6 +116,7 @@ sealed class RemoteFundingStatus {
 
 /** A minimal commitment for a given funding tx. */
 data class Commitment(
+    val fundingTxIndex: Long,
     val localFundingStatus: LocalFundingStatus, val remoteFundingStatus: RemoteFundingStatus,
     val localCommit: LocalCommit, val remoteCommit: RemoteCommit, val nextRemoteCommit: NextRemoteCommit?
 ) {
@@ -455,6 +456,7 @@ data class Commitment(
 /** Subset of Commitments when we want to work with a single, specific commitment. */
 data class FullCommitment(
     val params: ChannelParams, val changes: CommitmentChanges,
+    val fundingTxIndex: Long,
     val localFundingStatus: LocalFundingStatus, val remoteFundingStatus: RemoteFundingStatus,
     val localCommit: LocalCommit, val remoteCommit: RemoteCommit, val nextRemoteCommit: NextRemoteCommit?
 ) {
@@ -500,7 +502,7 @@ data class Commitments(
     fun availableBalanceForReceive(): MilliSatoshi = active.minOf { it.availableBalanceForReceive(params, changes) }
 
     // We always use the last commitment that was created, to make sure we never go back in time.
-    val latest = FullCommitment(params, changes, active.first().localFundingStatus, active.first().remoteFundingStatus, active.first().localCommit, active.first().remoteCommit, active.first().nextRemoteCommit)
+    val latest = FullCommitment(params, changes, active.first().fundingTxIndex, active.first().localFundingStatus, active.first().remoteFundingStatus, active.first().localCommit, active.first().remoteCommit, active.first().nextRemoteCommit)
 
     fun add(commitment: Commitment): Commitments = copy(active = buildList {
         add(commitment)

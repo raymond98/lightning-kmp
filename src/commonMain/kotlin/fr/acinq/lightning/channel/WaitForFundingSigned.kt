@@ -43,10 +43,11 @@ data class WaitForFundingSigned(
     override fun ChannelContext.processInternal(cmd: ChannelCommand): Pair<ChannelState, List<ChannelAction>> {
         return when {
             cmd is ChannelCommand.MessageReceived && cmd.message is CommitSig -> {
-                val firstCommitmentRes = Helpers.Funding.receiveFirstCommit(
+                val firstCommitmentRes = Helpers.Funding.receiveFirstCommitSig(
                     keyManager, fundingParams, localParams, remoteParams,
-                    fundingTx, firstCommitTx, cmd.message,
-                    remoteFirstPerCommitmentPoint,
+                    fundingTxIndex = 0, fundingTx,
+                    commitmentIndex = 0, remoteFirstPerCommitmentPoint,
+                    firstCommitTx, remoteCommitSig = cmd.message,
                     currentBlockHeight.toLong()
                 )
                 when (firstCommitmentRes) {
