@@ -329,7 +329,7 @@ data class WaitForFundingConfirmed(
             object None : RbfStatus()
             data class RbfRequested(val command: CMD_BUMP_FUNDING_FEE) : RbfStatus()
             data class InProgress(val rbfSession: InteractiveTxSession) : RbfStatus()
-            data class WaitForCommitSig(val fundingParams: InteractiveTxParams, val fundingTx: SharedTransaction, val commitTx: Helpers.Funding.FirstCommitTx) : RbfStatus()
+            data class WaitForCommitSig(val fundingParams: InteractiveTxParams, val fundingTx: SharedTransaction, val commitTx: Helpers.Funding.FirstCommitTxs) : RbfStatus()
             object RbfAborted : RbfStatus()
         }
     }

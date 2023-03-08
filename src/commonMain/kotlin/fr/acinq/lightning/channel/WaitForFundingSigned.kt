@@ -30,7 +30,7 @@ data class WaitForFundingSigned(
     val localPushAmount: MilliSatoshi,
     val remotePushAmount: MilliSatoshi,
     val fundingTx: SharedTransaction,
-    val firstCommitTx: Helpers.Funding.FirstCommitTx,
+    val firstCommitTxs: Helpers.Funding.FirstCommitTxs,
     val remoteFirstPerCommitmentPoint: PublicKey,
     val remoteSecondPerCommitmentPoint: PublicKey,
     val channelFlags: Byte,
@@ -47,11 +47,11 @@ data class WaitForFundingSigned(
                     keyManager, fundingParams, localParams, remoteParams,
                     fundingTxIndex = 0, fundingTx,
                     commitmentIndex = 0, remoteFirstPerCommitmentPoint,
-                    firstCommitTx, remoteCommitSig = cmd.message,
+                    firstCommitTxs, remoteCommitSig = cmd.message,
                     currentBlockHeight.toLong()
                 )
                 when (firstCommitmentRes) {
-                    Helpers.Funding.InvalidRemoteCommitSig -> handleLocalError(cmd, InvalidCommitmentSignature(channelId, firstCommitTx.localCommitTx.tx.txid))
+                    Helpers.Funding.InvalidRemoteCommitSig -> handleLocalError(cmd, InvalidCommitmentSignature(channelId, firstCommitTxs.localCommitTx.tx.txid))
                     Helpers.Funding.FundingSigFailure -> {
                         logger.warning { "could not sign funding tx" }
                         Pair(Aborted, listOf(ChannelAction.Message.Send(Error(channelId, ChannelFundingError(channelId).message))))

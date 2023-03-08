@@ -9,7 +9,6 @@ import fr.acinq.lightning.MilliSatoshi
 import fr.acinq.lightning.ShortChannelId
 import fr.acinq.lightning.blockchain.BITCOIN_FUNDING_DEPTHOK
 import fr.acinq.lightning.blockchain.WatchConfirmed
-import fr.acinq.lightning.blockchain.WatchSpent
 import fr.acinq.lightning.blockchain.fee.FeeratePerKw
 import fr.acinq.lightning.channel.*
 import fr.acinq.lightning.tests.TestConstants
@@ -25,7 +24,7 @@ class WaitForFundingSignedTestsCommon : LightningTestSuite() {
     @Test
     fun `recv CommitSig`() {
         val (alice, commitSigAlice, bob, commitSigBob) = init()
-        val commitInput = alice.state.firstCommitTx.localCommitTx.input
+        val commitInput = alice.state.firstCommitTxs.localCommitTx.input
         run {
             val (alice1, actionsAlice1) = alice.process(ChannelCommand.MessageReceived(commitSigBob))
             assertIs<LNChannel<WaitForFundingConfirmed>>(alice1)

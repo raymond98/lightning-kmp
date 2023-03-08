@@ -281,7 +281,7 @@ object Helpers {
             )
         }
 
-        data class FirstCommitTx(val localSpec: CommitmentSpec, val localCommitTx: Transactions.TransactionWithInputInfo.CommitTx, val remoteSpec: CommitmentSpec, val remoteCommitTx: Transactions.TransactionWithInputInfo.CommitTx)
+        data class FirstCommitTxs(val localSpec: CommitmentSpec, val localCommitTx: Transactions.TransactionWithInputInfo.CommitTx, val remoteSpec: CommitmentSpec, val remoteCommitTx: Transactions.TransactionWithInputInfo.CommitTx)
 
         fun makeFirstCommitTxs(
             keyManager: KeyManager,
@@ -296,7 +296,7 @@ object Helpers {
             fundingTxHash: ByteVector32,
             fundingTxOutputIndex: Int,
             remoteFirstPerCommitmentPoint: PublicKey
-        ): Either<ChannelException, FirstCommitTx> = makeCommitTxsWithoutHtlcs(
+        ): Either<ChannelException, FirstCommitTxs> = makeCommitTxsWithoutHtlcs(
             keyManager, channelId = temporaryChannelId, localParams, remoteParams,
             fundingAmount = localFundingAmount + remoteFundingAmount,
             toLocal = localFundingAmount.toMilliSatoshi() - localPushAmount + remotePushAmount,
@@ -322,7 +322,7 @@ object Helpers {
             fundingTxOutputIndex: Int,
             remotePerCommitmentPoint: PublicKey,
             commitmentIndex: Long
-        ): Either<ChannelException, FirstCommitTx> {
+        ): Either<ChannelException, FirstCommitTxs> {
             val localSpec = CommitmentSpec(setOf(), commitTxFeerate, toLocal = toLocal, toRemote = toRemote)
             val remoteSpec = CommitmentSpec(setOf(), commitTxFeerate, toLocal = toRemote, toRemote = toLocal)
 
@@ -344,7 +344,7 @@ object Helpers {
             val localCommitTx = Commitments.makeLocalTxs(keyManager.channelKeys(localParams.fundingKeyPath), commitmentIndex, localParams, remoteParams, commitmentInput, localPerCommitmentPoint, localSpec).first
             val remoteCommitTx = Commitments.makeRemoteTxs(keyManager, commitmentIndex, localParams, remoteParams, commitmentInput, remotePerCommitmentPoint, remoteSpec).first
 
-            return Either.Right(FirstCommitTx(localSpec, localCommitTx, remoteSpec, remoteCommitTx))
+            return Either.Right(FirstCommitTxs(localSpec, localCommitTx, remoteSpec, remoteCommitTx))
         }
 
         sealed class ReceiveFirstCommitResult
@@ -352,6 +352,10 @@ object Helpers {
         object InvalidRemoteCommitSig : ReceiveFirstCommitResult()
         object FundingSigFailure : ReceiveFirstCommitResult()
 
+        /**
+         * Receive the first commit_sig after a rbf or a splice.
+         * If the commit_sig checks out, we sign the corresponding funding tx.
+         */
         fun receiveFirstCommitSig(
             keyManager: KeyManager,
             fundingParams: InteractiveTxParams,
@@ -361,13 +365,13 @@ object Helpers {
             fundingTx: SharedTransaction,
             commitmentIndex: Long,
             remotePerCommitmentPoint: PublicKey,
-            firstCommitTx: FirstCommitTx,
+            firstCommitTxs: FirstCommitTxs,
             remoteCommitSig: CommitSig,
             currentBlockHeight: Long,
         ): ReceiveFirstCommitResult {
             val fundingPubKey = localParams.channelKeys(keyManager).fundingPubKey
-            val localSigOfLocalTx = keyManager.sign(firstCommitTx.localCommitTx, localParams.channelKeys(keyManager).fundingPrivateKey)
-            val signedLocalCommitTx = Transactions.addSigs(firstCommitTx.localCommitTx, fundingPubKey, remoteParams.fundingPubKey, localSigOfLocalTx, remoteCommitSig.signature)
+            val localSigOfLocalTx = keyManager.sign(firstCommitTxs.localCommitTx, localParams.channelKeys(keyManager).fundingPrivateKey)
+            val signedLocalCommitTx = Transactions.addSigs(firstCommitTxs.localCommitTx, fundingPubKey, remoteParams.fundingPubKey, localSigOfLocalTx, remoteCommitSig.signature)
             return when (Transactions.checkSpendable(signedLocalCommitTx)) {
                 is Try.Failure -> InvalidRemoteCommitSig
                 is Try.Success -> {
@@ -378,8 +382,8 @@ object Helpers {
                                 fundingTxIndex = fundingTxIndex,
                                 LocalFundingStatus.UnconfirmedFundingTx(signedFundingTx, fundingParams, currentBlockHeight),
                                 RemoteFundingStatus.NotLocked,
-                                LocalCommit(commitmentIndex, firstCommitTx.localSpec, PublishableTxs(signedLocalCommitTx, listOf())),
-                                RemoteCommit(commitmentIndex, firstCommitTx.remoteSpec, firstCommitTx.remoteCommitTx.tx.txid, remotePerCommitmentPoint),
+                                LocalCommit(commitmentIndex, firstCommitTxs.localSpec, PublishableTxs(signedLocalCommitTx, listOf())),
+                                RemoteCommit(commitmentIndex, firstCommitTxs.remoteSpec, firstCommitTxs.remoteCommitTx.tx.txid, remotePerCommitmentPoint),
                                 nextRemoteCommit = null
                             )
                             FirstCommitment(signedFundingTx, commitment)

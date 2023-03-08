@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 
 class WaitForFundingCreatedTestsCommon : LightningTestSuite() {
 
-    private fun verifyCommits(commitAlice: Helpers.Funding.FirstCommitTx, commitBob: Helpers.Funding.FirstCommitTx, balanceAlice: MilliSatoshi, balanceBob: MilliSatoshi) {
+    private fun verifyCommits(commitAlice: Helpers.Funding.FirstCommitTxs, commitBob: Helpers.Funding.FirstCommitTxs, balanceAlice: MilliSatoshi, balanceBob: MilliSatoshi) {
         assertEquals(commitAlice.localSpec.toLocal, balanceAlice)
         assertEquals(commitAlice.localSpec.toRemote, balanceBob)
         assertEquals(commitAlice.remoteSpec.toLocal, balanceBob)
@@ -60,7 +60,7 @@ class WaitForFundingCreatedTestsCommon : LightningTestSuite() {
         assertIs<LNChannel<WaitForFundingSigned>>(bob3)
         assertEquals(alice2.state.channelFeatures, ChannelFeatures(setOf(Feature.StaticRemoteKey, Feature.AnchorOutputs)))
         assertEquals(bob3.state.channelFeatures, ChannelFeatures(setOf(Feature.StaticRemoteKey, Feature.AnchorOutputs)))
-        verifyCommits(alice2.state.firstCommitTx, bob3.state.firstCommitTx, TestConstants.aliceFundingAmount.toMilliSatoshi() - TestConstants.alicePushAmount, TestConstants.alicePushAmount)
+        verifyCommits(alice2.state.firstCommitTxs, bob3.state.firstCommitTxs, TestConstants.aliceFundingAmount.toMilliSatoshi() - TestConstants.alicePushAmount, TestConstants.alicePushAmount)
     }
 
     @Test
@@ -83,7 +83,7 @@ class WaitForFundingCreatedTestsCommon : LightningTestSuite() {
         assertIs<LNChannel<WaitForFundingSigned>>(bob3)
         assertEquals(alice2.state.channelFeatures, ChannelFeatures(setOf(Feature.StaticRemoteKey, Feature.AnchorOutputs)))
         assertEquals(bob3.state.channelFeatures, ChannelFeatures(setOf(Feature.StaticRemoteKey, Feature.AnchorOutputs)))
-        verifyCommits(alice2.state.firstCommitTx, bob3.state.firstCommitTx, TestConstants.aliceFundingAmount.toMilliSatoshi() - TestConstants.alicePushAmount, TestConstants.bobFundingAmount.toMilliSatoshi() + TestConstants.alicePushAmount)
+        verifyCommits(alice2.state.firstCommitTxs, bob3.state.firstCommitTxs, TestConstants.aliceFundingAmount.toMilliSatoshi() - TestConstants.alicePushAmount, TestConstants.bobFundingAmount.toMilliSatoshi() + TestConstants.alicePushAmount)
     }
 
     @Test
@@ -107,7 +107,7 @@ class WaitForFundingCreatedTestsCommon : LightningTestSuite() {
         assertIs<LNChannel<WaitForFundingSigned>>(bob3)
         assertEquals(alice2.state.channelFeatures, ChannelFeatures(setOf(Feature.StaticRemoteKey, Feature.AnchorOutputs)))
         assertEquals(bob3.state.channelFeatures, ChannelFeatures(setOf(Feature.StaticRemoteKey, Feature.AnchorOutputs)))
-        verifyCommits(alice2.state.firstCommitTx, bob3.state.firstCommitTx, balanceAlice = 10_000_000.msat, balanceBob = 1_500_000_000.msat)
+        verifyCommits(alice2.state.firstCommitTxs, bob3.state.firstCommitTxs, balanceAlice = 10_000_000.msat, balanceBob = 1_500_000_000.msat)
     }
 
     @Test
@@ -130,7 +130,7 @@ class WaitForFundingCreatedTestsCommon : LightningTestSuite() {
         assertIs<LNChannel<WaitForFundingSigned>>(bob3)
         assertEquals(alice2.state.channelFeatures, ChannelFeatures(setOf(Feature.StaticRemoteKey, Feature.AnchorOutputs, Feature.ZeroReserveChannels)))
         assertEquals(bob3.state.channelFeatures, ChannelFeatures(setOf(Feature.StaticRemoteKey, Feature.AnchorOutputs, Feature.ZeroReserveChannels)))
-        verifyCommits(alice2.state.firstCommitTx, bob3.state.firstCommitTx, TestConstants.aliceFundingAmount.toMilliSatoshi(), TestConstants.bobFundingAmount.toMilliSatoshi())
+        verifyCommits(alice2.state.firstCommitTxs, bob3.state.firstCommitTxs, TestConstants.aliceFundingAmount.toMilliSatoshi(), TestConstants.bobFundingAmount.toMilliSatoshi())
     }
 
     @Test
