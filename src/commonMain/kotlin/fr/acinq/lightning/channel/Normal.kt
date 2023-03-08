@@ -167,10 +167,11 @@ data class Normal(
                     }
                     is CommitSig -> when (spliceStatus) {
                         is SpliceStatus.WaitForCommitSig -> {
+                            val parentCommitment = commitments.active.first()
                             val firstCommitmentRes = Helpers.Funding.receiveFirstCommitSig(
                                 keyManager, spliceStatus.fundingParams, commitments.params.localParams, commitments.params.remoteParams,
-                                fundingTxIndex = commitments.active.first().fundingTxIndex, fundingTx = spliceStatus.fundingTx,
-                                commitmentIndex = 0, commitments.remoteNextCommitInfo.right!!,
+                                fundingTxIndex = parentCommitment.fundingTxIndex + 1, fundingTx = spliceStatus.fundingTx,
+                                commitmentIndex = parentCommitment.localCommit.index, parentCommitment.remoteCommit.remotePerCommitmentPoint,
                                 spliceStatus.commitTxs, remoteCommitSig = cmd.message,
                                 currentBlockHeight.toLong()
                             )
@@ -508,7 +509,7 @@ data class Normal(
                                     Pair(this@Normal, listOf(ChannelAction.Message.Send(Warning(channelId, InvalidFundingSignature(channelId, cmd.message.txId).message))))
                                 }
                                 else -> {
-                                    when (val res = commitments.updateLocalFundingStatus(fullySignedTx.signedTx.txid, commitments.latest.localFundingStatus.copy(sharedTx = fullySignedTx), logger)) {
+                                    when (val res = commitments.run { updateLocalFundingStatus(fullySignedTx.signedTx.txid, commitments.latest.localFundingStatus.copy(sharedTx = fullySignedTx)) }) {
                                         is Either.Left -> Pair(this@Normal, listOf())
                                         is Either.Right -> {
                                             logger.info { "received remote funding signatures, publishing fundingTxId=${fullySignedTx.signedTx.txid} fundingTxIndex=${commitments.latest.fundingTxIndex}" }
@@ -535,6 +536,16 @@ data class Normal(
                         is LocalFundingStatus.ConfirmedFundingTx -> {
                             logger.info { "ignoring funding signatures for txId=${cmd.message.txId}, transaction is already confirmed" }
                             Pair(this@Normal, listOf())
+                        }
+                    }
+                    is SpliceLocked -> {
+                        when (val res = commitments.run { updateRemoteFundingStatus(cmd.message.fundingTxid) }) {
+                            is Either.Left -> Pair(this@Normal, emptyList())
+                            is Either.Right -> {
+                                val (commitments1, _) = res.value
+                                val nextState = this@Normal.copy(commitments = commitments1)
+                                Pair(nextState, listOf(ChannelAction.Storage.StoreState(nextState)))
+                            }
                         }
                     }
                     is Error -> handleRemoteError(cmd.message)

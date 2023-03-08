@@ -304,10 +304,13 @@ sealed class ChannelStateWithCommitments : ChannelState() {
      * We also watch this funding transaction to be able to detect force-close attempts.
      */
     internal fun ChannelContext.acceptFundingTxConfirmed(w: WatchEventConfirmed): Either<Commitments, Triple<Commitments, Commitment, List<ChannelAction>>> {
+        logger.info { "funding txid=${w.tx.txid} was confirmed at blockHeight=${w.blockHeight} txIndex=${w.txIndex}" }
         val fundingStatus = LocalFundingStatus.ConfirmedFundingTx(w.tx)
-        return commitments.updateLocalFundingStatus(w.tx.txid, fundingStatus, logger).map { (commitments1, commitment) ->
-            val watchSpent = WatchSpent(channelId, commitment.fundingTxId, commitment.commitInput.outPoint.index.toInt(), commitment.commitInput.txOut.publicKeyScript, BITCOIN_FUNDING_SPENT)
-            Triple(commitments1, commitment, listOf(ChannelAction.Blockchain.SendWatch(watchSpent)))
+        return commitments.run {
+            updateLocalFundingStatus(w.tx.txid, fundingStatus).map { (commitments1, commitment) ->
+                val watchSpent = WatchSpent(channelId, commitment.fundingTxId, commitment.commitInput.outPoint.index.toInt(), commitment.commitInput.txOut.publicKeyScript, BITCOIN_FUNDING_SPENT)
+                Triple(commitments1, commitment, listOf(ChannelAction.Blockchain.SendWatch(watchSpent)))
+            }
         }
     }
 
