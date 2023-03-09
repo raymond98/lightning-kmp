@@ -34,8 +34,12 @@ data class Normal(
 
     override fun ChannelContext.processInternal(cmd: ChannelCommand): Pair<ChannelState, List<ChannelAction>> {
         return when (cmd) {
-            is ChannelCommand.ExecuteCommand -> {
-                when (cmd.command) {
+            is ChannelCommand.ExecuteCommand -> when {
+                cmd.command is Command.ForbiddenDuringSplice && spliceStatus !is SpliceStatus.None -> {
+                    val error = ForbiddenDuringSplice(channelId, cmd.command)
+                    return handleCommandError(cmd.command, error, channelUpdate)
+                }
+                else -> when (cmd.command) {
                     is CMD_ADD_HTLC -> {
                         if (localShutdown != null || remoteShutdown != null) {
                             // note: spec would allow us to keep sending new htlcs after having received their shutdown (and not sent ours)
@@ -494,7 +498,9 @@ data class Normal(
                                             val commitTxs = commitTxRes.value
                                             val localSigOfRemoteTx = keyManager.sign(commitTxs.remoteCommitTx, commitments.params.localParams.channelKeys(keyManager).fundingPrivateKey)
                                             val commitSig = CommitSig(channelId, localSigOfRemoteTx, listOf())
-                                            val nextState = this@Normal.copy(spliceStatus = SpliceStatus.WaitForCommitSig(spliceStatus.replyTo, interactiveTxSession.fundingParams, interactiveTxAction.sharedTx, commitTxs, spliceStatus.origins))
+                                            val nextState = this@Normal.copy(
+                                                spliceStatus = SpliceStatus.WaitForCommitSig(spliceStatus.replyTo, interactiveTxSession.fundingParams, interactiveTxAction.sharedTx, commitTxs, spliceStatus.origins)
+                                            )
                                             val actions = buildList {
                                                 interactiveTxAction.txComplete?.let { add(ChannelAction.Message.Send(it)) }
                                                 add(ChannelAction.Message.Send(commitSig))
@@ -637,8 +643,22 @@ data class Normal(
         sealed class SpliceStatus {
             object None : SpliceStatus()
             data class Requested(val command: Command.Splice.Request, val spliceInit: SpliceInit) : SpliceStatus()
-            data class InProgress(val replyTo: CompletableDeferred<Command.Splice.Response>?, val spliceSession: InteractiveTxSession, val localPushAmount: MilliSatoshi, val remotePushAmount: MilliSatoshi, val origins: List<ChannelOrigin>) : SpliceStatus()
-            data class WaitForCommitSig(val replyTo: CompletableDeferred<Command.Splice.Response>?, val fundingParams: InteractiveTxParams, val fundingTx: SharedTransaction, val commitTxs: Helpers.Funding.FirstCommitTxs, val origins: List<ChannelOrigin>) : SpliceStatus()
+            data class InProgress(
+                val replyTo: CompletableDeferred<Command.Splice.Response>?,
+                val spliceSession: InteractiveTxSession,
+                val localPushAmount: MilliSatoshi,
+                val remotePushAmount: MilliSatoshi,
+                val origins: List<ChannelOrigin>
+            ) : SpliceStatus()
+
+            data class WaitForCommitSig(
+                val replyTo: CompletableDeferred<Command.Splice.Response>?,
+                val fundingParams: InteractiveTxParams,
+                val fundingTx: SharedTransaction,
+                val commitTxs: Helpers.Funding.FirstCommitTxs,
+                val origins: List<ChannelOrigin>
+            ) : SpliceStatus()
+
             object Aborted : SpliceStatus()
         }
     }
