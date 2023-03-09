@@ -17,41 +17,47 @@ import fr.acinq.lightning.wire.OnionRoutingPacket
 import kotlinx.coroutines.CompletableDeferred
 
 sealed class Command {
-    data class Splice(val replyTo: CompletableDeferred<Result>, val spliceIn: SpliceIn?, val spliceOut: SpliceOut?, val feerate: FeeratePerKw, val channelOrigins: List<ChannelOrigin> = emptyList()) : Command() {
-        init {
-            require(spliceIn != null || spliceOut != null) { "there must be a splice-in or a splice-out" }
-        }
+    sealed class Splice {
+        data class Request(val replyTo: CompletableDeferred<Response>, val spliceIn: SpliceIn?, val spliceOut: SpliceOut?, val feerate: FeeratePerKw, val channelOrigins: List<ChannelOrigin> = emptyList()) : Command() {
+            init {
+                require(spliceIn != null || spliceOut != null) { "there must be a splice-in or a splice-out" }
+            }
 
-        val additionalLocalFunding: Satoshi = spliceIn?.additionalLocalFunding ?: 0.sat
-        val pushAmount: MilliSatoshi = spliceIn?.pushAmount ?: 0.msat
-        val spliceOutputs: List<TxOut> = spliceOut?.let { listOf(TxOut(it.amount, it.scriptPubKey)) } ?: emptyList()
+            val additionalLocalFunding: Satoshi = spliceIn?.additionalLocalFunding ?: 0.sat
+            val pushAmount: MilliSatoshi = spliceIn?.pushAmount ?: 0.msat
+            val spliceOutputs: List<TxOut> = spliceOut?.let { listOf(TxOut(it.amount, it.scriptPubKey)) } ?: emptyList()
 
-        companion object {
+
             data class SpliceIn(val wallet: WalletState, val additionalLocalFunding: Satoshi, val pushAmount: MilliSatoshi = 0.msat)
             data class SpliceOut(val amount: Satoshi, val scriptPubKey: ByteVector)
 
-            sealed class Result {
-                data class Success(
-                    val channelId: ByteVector32,
-                    val fundingTxIndex: Long,
-                    val fundingTxId: ByteVector32,
-                    val capacity: Satoshi,
-                    val balance: MilliSatoshi
-                ) : Result()
+            companion object {
 
-                sealed class Failure : Result() {
-                    object InsufficientFunds : Failure()
-                    object InvalidSpliceOutPubKeyScript : Failure()
-                    object SpliceAlreadyInProgress : Failure()
-                    object ChannelNotIdle : Failure()
-                    data class FundingFailure(val reason: FundingContributionFailure) : Failure()
-                    object CannotStartSession : Failure()
-                    data class InteractiveTxSessionFailed(val reason: InteractiveTxSessionAction.RemoteFailure) : Failure()
-                    data class CannotCreateCommitTx(val reason: ChannelException) : Failure()
-                    object Disconnected : Failure()
-                }
             }
         }
+
+        sealed class Response {
+            data class Success(
+                val channelId: ByteVector32,
+                val fundingTxIndex: Long,
+                val fundingTxId: ByteVector32,
+                val capacity: Satoshi,
+                val balance: MilliSatoshi
+            ) : Response()
+
+            sealed class Failure : Response() {
+                object InsufficientFunds : Failure()
+                object InvalidSpliceOutPubKeyScript : Failure()
+                object SpliceAlreadyInProgress : Failure()
+                object ChannelNotIdle : Failure()
+                data class FundingFailure(val reason: FundingContributionFailure) : Failure()
+                object CannotStartSession : Failure()
+                data class InteractiveTxSessionFailed(val reason: InteractiveTxSessionAction.RemoteFailure) : Failure()
+                data class CannotCreateCommitTx(val reason: ChannelException) : Failure()
+                object Disconnected : Failure()
+            }
+        }
+
     }
 }
 

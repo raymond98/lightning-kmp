@@ -437,15 +437,16 @@ class Peer(
      * @return  [Command.Splice.Companion.Result] if a splice was attempted, or {null} if no suitable
      *          channel was found
      */
-    suspend fun spliceOut(amount: Satoshi, scriptPubKey: ByteVector, feeratePerKw: FeeratePerKw): Command.Splice.Companion.Result? {
+    suspend fun spliceOut(amount: Satoshi, scriptPubKey: ByteVector, feeratePerKw: FeeratePerKw): Command.Splice.Response? {
         return channels.values
             .filterIsInstance<Normal>()
             .firstOrNull { it.commitments.availableBalanceForSend() > amount }
             ?.let { channel ->
-                val spliceCommand = Command.Splice(
+                val spliceCommand = Command.Splice.Request(
                     replyTo = CompletableDeferred(),
                     spliceIn = null,
-                    spliceOut = Command.Splice.Companion.SpliceOut(amount, scriptPubKey),
+                    spliceOut = Command.Splice.Request.
+                    SpliceOut(amount, scriptPubKey),
                     feerate = feeratePerKw
                 )
                 send(WrappedChannelCommand(channel.channelId, ChannelCommand.ExecuteCommand(spliceCommand)))
