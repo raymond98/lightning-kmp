@@ -887,22 +887,37 @@ class Peer(
             }
 
             cmd is RequestChannelOpen -> {
-                // We currently only support p2wpkh inputs.
-                val utxos = cmd.wallet.confirmedUtxos
                 val balance = cmd.wallet.confirmedBalance
-                val grandParents = utxos.map { utxo -> utxo.previousTx.txIn.map { txIn -> txIn.outPoint } }.flatten()
-                val pleaseOpenChannel = PleaseOpenChannel(
-                    nodeParams.chainHash,
-                    cmd.requestId,
-                    balance,
-                    utxos.size,
-                    utxos.size * Transactions.p2wpkhInputWeight,
-                    TlvStream(listOf(PleaseOpenChannelTlv.MaxFees(cmd.maxFeeBasisPoints, cmd.maxFeeFloor), PleaseOpenChannelTlv.GrandParents(grandParents)))
-                )
-                logger.info { "sending please_open_channel with ${utxos.size} utxos (amount = ${balance})" }
-                sendToPeer(pleaseOpenChannel)
-                nodeParams._nodeEvents.emit(SwapInEvents.Requested(pleaseOpenChannel))
-                channelRequests = channelRequests + (pleaseOpenChannel.requestId to cmd)
+                when (val channel = channels.values.firstOrNull { it is ChannelStateWithCommitments }) {
+                    is ChannelStateWithCommitments -> {
+                        val feerate = onChainFeeratesFlow.filterNotNull().first().mutualCloseFeerate
+                        logger.info { "requesting splice-in using confirmed balance: $balance" }
+                        val spliceCommand = Command.Splice.Request(
+                            replyTo = CompletableDeferred(),
+                            spliceIn = Command.Splice.Request.SpliceIn(cmd.wallet, balance),
+                            spliceOut = null,
+                            feerate = feerate
+                        )
+                        input.send(WrappedChannelCommand(channel.channelId, ChannelCommand.ExecuteCommand(spliceCommand)))
+                    }
+                    else -> {
+                        // We currently only support p2wpkh inputs.
+                        val utxos = cmd.wallet.confirmedUtxos
+                        val grandParents = utxos.map { utxo -> utxo.previousTx.txIn.map { txIn -> txIn.outPoint } }.flatten()
+                        val pleaseOpenChannel = PleaseOpenChannel(
+                            nodeParams.chainHash,
+                            cmd.requestId,
+                            balance,
+                            utxos.size,
+                            utxos.size * Transactions.p2wpkhInputWeight,
+                            TlvStream(listOf(PleaseOpenChannelTlv.MaxFees(cmd.maxFeeBasisPoints, cmd.maxFeeFloor), PleaseOpenChannelTlv.GrandParents(grandParents)))
+                        )
+                        logger.info { "sending please_open_channel with ${utxos.size} utxos (amount = ${balance})" }
+                        sendToPeer(pleaseOpenChannel)
+                        nodeParams._nodeEvents.emit(SwapInEvents.Requested(pleaseOpenChannel))
+                        channelRequests = channelRequests + (pleaseOpenChannel.requestId to cmd)
+                    }
+                }
             }
 
             cmd is OpenChannel -> {

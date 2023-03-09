@@ -82,29 +82,23 @@ data class InteractiveTxParams(
     val serialIdParity = if (isInitiator) 0 else 1
 
     companion object {
-        fun computeLocalContribution(isInitiator: Boolean, commitment: Commitment, spliceInAmount: Satoshi, spliceOut: List<TxOut>, targetFeerate: FeeratePerKw): Satoshi {
-            // If there is a splice-in, whatever the amount of the splice-in, fees will be paid for by bitcoind, when we call
-            // fundrawtransaction to pay the inputs. they won't change the contribution so we don't take them into account
-            val fees = if (spliceInAmount == 0.sat) {
-                val commonFieldsWeight = if (isInitiator) {
-                    val dummyTx = Transaction(
-                        version = 2,
-                        txIn = emptyList(), // NB: we add the weight manually
-                        txOut = listOf(commitment.commitInput.txOut), // we're taking the previous output, it has the wrong amount but we don't care: only the weight matters to compute fees
-                        lockTime = 0
-                    )
-                    dummyTx.weight() + SharedFundingInput.Multisig2of2.weight
-                } else 0
-                // TODO: use proper weight() method when it is released in bitcoin-kmp (https://github.com/ACINQ/bitcoin-kmp/pull/84)
-                val spliceOutputsWeight = 4 * spliceOut.sumOf { TxOut.write(it).size }
-                val weight = commonFieldsWeight + spliceOutputsWeight
-                Transactions.weight2fee(targetFeerate, weight.toInt())
-                0.sat
-            } else {
-                // if there is a splice-in, bitcoind will add fees when adding the input
-                0.sat
-            }
-            return commitment.localCommit.spec.toLocal.truncateToSatoshi() + spliceInAmount - spliceOut.map { it.amount }.sum() - fees
+        fun computeLocalContribution(isInitiator: Boolean, commitment: Commitment, spliceIn: List<WalletState.Utxo>, spliceOut: List<TxOut>, targetFeerate: FeeratePerKw): Satoshi {
+            val commonFieldsWeight = if (isInitiator) {
+                val dummyTx = Transaction(
+                    version = 2,
+                    txIn = emptyList(), // NB: we add the weight manually
+                    txOut = listOf(commitment.commitInput.txOut), // we're taking the previous output, it has the wrong amount but we don't care: only the weight matters to compute fees
+                    lockTime = 0
+                )
+                dummyTx.weight() + SharedFundingInput.Multisig2of2.weight
+            } else 0
+            // TODO: use proper weight() method when it is released in bitcoin-kmp (https://github.com/ACINQ/bitcoin-kmp/pull/84)
+            val dummyWalletWitness = Script.witnessPay2wpkh(Transactions.PlaceHolderPubKey, Scripts.der(Transactions.PlaceHolderSig, SigHash.SIGHASH_ALL))
+            val spliceInputsWeight = 4 * spliceIn.map { TxIn(it.outPoint, ByteVector.empty, 0, dummyWalletWitness) }.sumOf { TxIn.write(it).size } + ScriptWitness.write(dummyWalletWitness).size
+            val spliceOutputsWeight = 4 * spliceOut.sumOf { TxOut.write(it).size }
+            val weight = commonFieldsWeight + spliceInputsWeight + spliceOutputsWeight + 3 // TODO magic!!
+            val fees = Transactions.weight2fee(targetFeerate, weight.toInt())
+            return commitment.localCommit.spec.toLocal.truncateToSatoshi() + spliceIn.map { it.amount }.sum() - spliceOut.map { it.amount }.sum() - fees
         }
     }
 }

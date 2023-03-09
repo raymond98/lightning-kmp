@@ -108,7 +108,7 @@ data class Normal(
                                 val fundingAmount = InteractiveTxParams.computeLocalContribution(
                                     isInitiator = true,
                                     commitment = commitments.active.first(),
-                                    spliceInAmount = cmd.command.additionalLocalFunding,
+                                    spliceIn = cmd.command.spliceIn?.wallet?.confirmedUtxos ?: emptyList(),
                                     spliceOut = cmd.command.spliceOutputs,
                                     targetFeerate = cmd.command.feerate
                                 )
@@ -427,7 +427,7 @@ data class Normal(
                             )
                             when (val fundingContributions = FundingContributions.create(
                                 params = fundingParams,
-                                sharedUtxo = Pair(sharedInput, parentCommitment.fundingAmount),
+                                sharedUtxo = Pair(sharedInput, parentCommitment.localCommit.spec.toLocal.truncateToSatoshi()),
                                 walletUtxos = spliceStatus.command.spliceIn?.wallet?.confirmedUtxos ?: emptyList(),
                                 localOutputs = spliceStatus.command.spliceOutputs,
                                 changePubKey = null // we're spending every funds available TODO: check this
