@@ -108,22 +108,13 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
      * - for a swap-in origin, a new incoming payment must be created. We use the channel id to generate the payment's preimage.
      * - for unknown origin, the amount is handled as a swap-in coming from an unknown address.
      */
-    suspend fun process(channelId: ByteVector32, action: ChannelAction.Storage.StoreIncomingAmount) {
+    suspend fun process(channelId: ByteVector32, action: ChannelAction.Storage.StoreIncomingPayment) {
         val fakePreimage = channelId.sha256()
-        when (action.origin) {
-            null -> {
-                // TODO: hacky, needs clean-up
-                logger.warning { "incoming amount with empty origin, we store only minimal information" }
-                db.addAndReceivePayment(
-                    preimage = fakePreimage,
-                    origin = IncomingPayment.Origin.SwapIn(address = ""),
-                    receivedWith = setOf(IncomingPayment.ReceivedWith.NewChannel(id = UUID.randomUUID(), amount = action.amount, serviceFee = 0.msat, channelId = channelId))
-                )
-            }
+        when (action.channelOrigin) {
             is ChannelOrigin.PayToOpenOrigin -> {
                 // In that case, the pay-to-open payment parts have already been handled in the main `processPaymentPart` handler. We just need
                 // to update the channel id of the pay-to-open received-with parts with type new-channel.
-                db.updateNewChannelReceivedWithChannelId(action.origin.paymentHash, channelId)
+                db.updateNewChannelReceivedWithChannelId(action.channelOrigin.paymentHash, channelId)
             }
             is ChannelOrigin.PleaseOpenChannelOrigin -> {
                 db.addAndReceivePayment(
@@ -133,8 +124,8 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                         IncomingPayment.ReceivedWith.NewChannel(
                             id = UUID.randomUUID(),
                             amount = action.amount,
-                            serviceFee = action.origin.serviceFee,
-                            fundingFee = action.origin.fundingFee,
+                            serviceFee = action.channelOrigin.serviceFee,
+                            fundingFee = action.channelOrigin.miningFee,
                             channelId = channelId
                         )
                     )

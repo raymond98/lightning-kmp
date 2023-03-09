@@ -1,15 +1,20 @@
 package fr.acinq.lightning.channel
 
 import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.crypto.Pack
+import fr.acinq.lightning.ChannelEvents
 import fr.acinq.lightning.MilliSatoshi
 import fr.acinq.lightning.ShortChannelId
 import fr.acinq.lightning.blockchain.BITCOIN_FUNDING_DEPTHOK
 import fr.acinq.lightning.blockchain.WatchConfirmed
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.crypto.ShaChain
+import fr.acinq.lightning.db.IncomingPayment
 import fr.acinq.lightning.utils.Either
+import fr.acinq.lightning.utils.msat
+import fr.acinq.lightning.utils.toMilliSatoshi
 import fr.acinq.lightning.wire.*
 import kotlin.math.absoluteValue
 
@@ -72,6 +77,13 @@ data class WaitForFundingSigned(
                         // We watch for confirmation in all cases, to allow pruning outdated commitments when transactions confirm.
                         val fundingMinDepth = Helpers.minDepthForFunding(staticParams.nodeParams, fundingParams.fundingAmount)
                         val watchConfirmed = WatchConfirmed(channelId, commitment.fundingTxId, commitment.commitInput.txOut.publicKeyScript, fundingMinDepth.toLong(), BITCOIN_FUNDING_DEPTHOK)
+                        val commonActions = buildList {
+                            add(ChannelAction.Blockchain.SendWatch(watchConfirmed))
+                            // We're not a liquidity provider, so we don't mind sending our signatures immediately.
+                            add(ChannelAction.Message.Send(signedFundingTx.localSigs))
+                            // If we receive funds as part of the channel creation, we will add it to our payments db
+                            channelOrigin?.let { add(ChannelAction.Storage.StoreIncomingPayment(channelOrigin, localInputs = fundingTx.localInputs.map { it.outPoint }.toSet())) }
+                        }
                         if (staticParams.useZeroConf) {
                             logger.info { "channel is using 0-conf, we won't wait for the funding tx to confirm" }
                             val nextPerCommitmentPoint = keyManager.commitmentPoint(localParams.channelKeys(keyManager).shaSeed, 1)
@@ -82,11 +94,10 @@ data class WaitForFundingSigned(
                             val shortChannelId = ShortChannelId(0, Pack.int32BE(commitment.fundingTxId.slice(0, 16).toByteArray()).absoluteValue, commitment.commitInput.outPoint.index.toInt())
                             val nextState = WaitForChannelReady(commitments, shortChannelId, channelReady)
                             val actions = buildList {
-                                add(ChannelAction.Blockchain.SendWatch(watchConfirmed))
-                                // We're not a liquidity provider, so we don't mind sending our signatures immediately.
-                                add(ChannelAction.Message.Send(signedFundingTx.localSigs))
+                                addAll(commonActions)
                                 add(ChannelAction.Message.Send(channelReady))
                                 add(ChannelAction.Storage.StoreState(nextState))
+                                add(ChannelAction.EmitEvent(ChannelEvents.Created(nextState)))
                             }
                             Pair(nextState, actions)
                         } else {
@@ -99,10 +110,9 @@ data class WaitForFundingSigned(
                                 null
                             )
                             val actions = buildList {
-                                add(ChannelAction.Blockchain.SendWatch(watchConfirmed))
+                                addAll(commonActions)
                                 add(ChannelAction.Storage.StoreState(nextState))
-                                // We're not a liquidity provider, so we don't mind sending our signatures immediately.
-                                add(ChannelAction.Message.Send(signedFundingTx.localSigs))
+                                add(ChannelAction.EmitEvent(ChannelEvents.Created(nextState)))
                             }
                             Pair(nextState, actions)
                         }

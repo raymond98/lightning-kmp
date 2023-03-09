@@ -204,14 +204,16 @@ data class Normal(
                                     // We watch for confirmation in all cases, to allow pruning outdated commitments when transactions confirm.
                                     val fundingMinDepth = Helpers.minDepthForFunding(staticParams.nodeParams, spliceStatus.fundingParams.fundingAmount)
                                     val watchConfirmed = WatchConfirmed(channelId, commitment.fundingTxId, commitment.commitInput.txOut.publicKeyScript, fundingMinDepth.toLong(), BITCOIN_FUNDING_DEPTHOK)
-                                    val commitments = commitments.add(commitment)
-                                    val nextState = this@Normal.copy(commitments = commitments, spliceStatus = SpliceStatus.None)
-                                    val actions = listOf(
-                                        ChannelAction.Blockchain.SendWatch(watchConfirmed),
+                                    val commitments1 = commitments.add(commitment)
+                                    val nextState = this@Normal.copy(commitments = commitments1, spliceStatus = SpliceStatus.None)
+                                    val actions = buildList {
+                                        add(ChannelAction.Blockchain.SendWatch(watchConfirmed))
                                         // We're not a liquidity provider, so we don't mind sending our signatures immediately.
-                                        ChannelAction.Message.Send(signedFundingTx.localSigs),
-                                        ChannelAction.Storage.StoreState(nextState)
-                                    )
+                                        add(ChannelAction.Message.Send(signedFundingTx.localSigs))
+                                        // If we received or sent funds as part of the splice, we will add a corresponding entry to our incoming/outgoing payments db
+                                        addAll(spliceStatus.origins.map { channelOrigin -> ChannelAction.Storage.StoreIncomingPayment(channelOrigin, localInputs = spliceStatus.fundingTx.localInputs.map { it.outPoint }.toSet()) })
+                                        add(ChannelAction.Storage.StoreState(nextState))
+                                    }
                                     Pair(nextState, actions)
                                 }
                             }

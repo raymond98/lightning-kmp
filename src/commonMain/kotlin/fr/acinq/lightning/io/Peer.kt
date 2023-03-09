@@ -526,8 +526,8 @@ class Peer(
                         action.htlcs.forEach { db.channels.addHtlcInfo(actualChannelId, it.commitmentNumber, it.paymentHash, it.cltvExpiry) }
                     }
 
-                    action is ChannelAction.Storage.StoreIncomingAmount -> {
-                        logger.info { "storing incoming amount=${action.amount} with origin=${action.origin}" }
+                    action is ChannelAction.Storage.StoreIncomingPayment -> {
+                        logger.info { "storing incoming amount=${action.amount} with origin=${action.channelOrigin}" }
                         incomingPaymentHandler.process(actualChannelId, action)
                     }
 
@@ -715,15 +715,15 @@ class Peer(
                                 is ChannelOrigin.PleaseOpenChannelOrigin -> when (val request = channelRequests[origin.requestId]) {
                                     is RequestChannelOpen -> {
                                         // Let's verify that the fee is indeed below our max (a honest LSP would not even try)
-                                        val totalFee = origin.serviceFee.truncateToSatoshi() + origin.fundingFee
+                                        val totalFee = origin.serviceFee.truncateToSatoshi() + origin.miningFee
                                         if (totalFee > request.maxFee) {
                                             logger.warning { "n:$remoteNodeId c:${msg.temporaryChannelId} rejecting open_channel2: fee is too high (max=${request.maxFee} actual=${totalFee})" }
                                             sendToPeer(Error(msg.temporaryChannelId, "channel opening fee too high"))
                                             return@withMDC
                                         }
                                         // We have to pay the fees for our inputs, so we deduce them from our funding amount.
-                                        val fundingAmount = request.wallet.confirmedBalance - origin.fundingFee
-                                        nodeParams._nodeEvents.emit(SwapInEvents.Accepted(request.requestId, serviceFee = origin.serviceFee, fundingFee = origin.fundingFee))
+                                        val fundingAmount = request.wallet.confirmedBalance - origin.miningFee
+                                        nodeParams._nodeEvents.emit(SwapInEvents.Accepted(request.requestId, serviceFee = origin.serviceFee, fundingFee = origin.miningFee))
                                         Triple(request.wallet, fundingAmount, origin.serviceFee)
                                     }
 

@@ -76,14 +76,14 @@ sealed class ChannelTlv : Tlv {
                 is ChannelOrigin.PayToOpenOrigin -> {
                     LightningCodecs.writeU16(1, out)
                     LightningCodecs.writeBytes(channelOrigin.paymentHash, out)
-                    LightningCodecs.writeU64(channelOrigin.fee.toLong(), out)
+                    LightningCodecs.writeU64(channelOrigin.serviceFee.toLong(), out)
                 }
 
                 is ChannelOrigin.PleaseOpenChannelOrigin -> {
                     LightningCodecs.writeU16(4, out)
                     LightningCodecs.writeBytes(channelOrigin.requestId, out)
                     LightningCodecs.writeU64(channelOrigin.serviceFee.toLong(), out)
-                    LightningCodecs.writeU64(channelOrigin.fundingFee.toLong(), out)
+                    LightningCodecs.writeU64(channelOrigin.miningFee.toLong(), out)
                 }
             }
         }
@@ -95,13 +95,15 @@ sealed class ChannelTlv : Tlv {
                 val origin = when (LightningCodecs.u16(input)) {
                     1 -> ChannelOrigin.PayToOpenOrigin(
                         paymentHash = LightningCodecs.bytes(input, 32).byteVector32(),
-                        fee = LightningCodecs.u64(input).sat,
+                        serviceFee = LightningCodecs.u64(input).sat,
+                        amount = LightningCodecs.u64(input).msat
                     )
 
                     4 -> ChannelOrigin.PleaseOpenChannelOrigin(
                         requestId = LightningCodecs.bytes(input, 32).byteVector32(),
                         serviceFee = LightningCodecs.u64(input).msat,
-                        fundingFee = LightningCodecs.u64(input).sat,
+                        miningFee = LightningCodecs.u64(input).sat,
+                        amount = LightningCodecs.u64(input).msat
                     )
 
                     else -> TODO("Unsupported channel origin discriminator")
