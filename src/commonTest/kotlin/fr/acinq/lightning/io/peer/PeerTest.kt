@@ -14,7 +14,7 @@ import fr.acinq.lightning.blockchain.fee.FeeratePerKw
 import fr.acinq.lightning.channel.*
 import fr.acinq.lightning.channel.TestsHelper.createWallet
 import fr.acinq.lightning.db.InMemoryDatabases
-import fr.acinq.lightning.db.OutgoingPayment
+import fr.acinq.lightning.db.LightningOutgoingPayment
 import fr.acinq.lightning.io.*
 import fr.acinq.lightning.payment.PaymentRequest
 import fr.acinq.lightning.router.Announcements
@@ -225,10 +225,10 @@ class PeerTest : LightningTestSuite() {
         val request = bob2alice.expect<PleaseOpenChannel>()
         assertEquals(request.localFundingAmount, 260_000.sat)
 
-        val fundingFee = 100.sat
-        val serviceFee = (internalRequestBob.maxFee - fundingFee - 1.sat).toMilliSatoshi()
+        val miningFee = 100.sat
+        val serviceFee = (internalRequestBob.maxFee - miningFee - 1.sat).toMilliSatoshi()
         // total fee is below max acceptable
-        assertTrue(fundingFee + serviceFee.truncateToSatoshi() < internalRequestBob.maxFee)
+        assertTrue(miningFee + serviceFee.truncateToSatoshi() < internalRequestBob.maxFee)
         val walletAlice = createWallet(nodeParams.first.keyManager, 50_000.sat).second
         val openAlice = OpenChannel(40_000.sat, 0.msat, walletAlice, FeeratePerKw(3500.sat), FeeratePerKw(2500.sat), 0, ChannelType.SupportedChannelType.AnchorOutputsZeroReserve)
         alice.send(openAlice)
@@ -236,7 +236,7 @@ class PeerTest : LightningTestSuite() {
             tlvStream = TlvStream(
                 listOf(
                     ChannelTlv.ChannelTypeTlv(ChannelType.SupportedChannelType.AnchorOutputsZeroReserve),
-                    ChannelTlv.ChannelOriginTlv(ChannelOrigin.PleaseOpenChannelOrigin(requestId, serviceFee, fundingFee))
+                    ChannelTlv.ChannelOriginTlv(ChannelOrigin.PleaseOpenChannelOrigin(requestId, serviceFee, miningFee, openAlice.pushAmount))
                 )
             )
         )
@@ -270,7 +270,7 @@ class PeerTest : LightningTestSuite() {
         // Bob has to deduce from its balance:
         //  - the fees for the channel open (10 000 sat)
         //  - the miner fees for his input(s) in the funding transaction
-        assertEquals(bobState.commitments.latest.localCommit.spec.toLocal, walletBob.confirmedBalance.toMilliSatoshi() - serviceFee - fundingFee.toMilliSatoshi())
+        assertEquals(bobState.commitments.latest.localCommit.spec.toLocal, walletBob.confirmedBalance.toMilliSatoshi() - serviceFee - miningFee.toMilliSatoshi())
     }
 
     @Test
@@ -295,7 +295,7 @@ class PeerTest : LightningTestSuite() {
             tlvStream = TlvStream(
                 listOf(
                     ChannelTlv.ChannelTypeTlv(ChannelType.SupportedChannelType.AnchorOutputsZeroReserve),
-                    ChannelTlv.ChannelOriginTlv(ChannelOrigin.PleaseOpenChannelOrigin(requestId, serviceFee, fundingFee))
+                    ChannelTlv.ChannelOriginTlv(ChannelOrigin.PleaseOpenChannelOrigin(requestId, serviceFee, fundingFee, openAlice.pushAmount))
                 )
             )
         )
@@ -317,7 +317,7 @@ class PeerTest : LightningTestSuite() {
             tlvStream = TlvStream(
                 listOf(
                     ChannelTlv.ChannelTypeTlv(ChannelType.SupportedChannelType.AnchorOutputsZeroReserve),
-                    ChannelTlv.ChannelOriginTlv(ChannelOrigin.PleaseOpenChannelOrigin(requestId, 50.sat.toMilliSatoshi(), 100.sat))
+                    ChannelTlv.ChannelOriginTlv(ChannelOrigin.PleaseOpenChannelOrigin(requestId, 50.sat.toMilliSatoshi(), 100.sat, openAlice.pushAmount))
                 )
             )
         )
@@ -457,7 +457,7 @@ class PeerTest : LightningTestSuite() {
         bob.send(ReceivePayment(randomBytes32(), 15_000_000.msat, Either.Left("test invoice"), null, deferredInvoice))
         val invoice = deferredInvoice.await()
 
-        alice.send(SendPaymentNormal(UUID.randomUUID(), invoice.amount!!, alice.remoteNodeId, OutgoingPayment.Details.Normal(invoice)))
+        alice.send(SendPaymentNormal(UUID.randomUUID(), invoice.amount!!, alice.remoteNodeId, LightningOutgoingPayment.Details.Normal(invoice)))
 
         val updateHtlc = alice2bob.expect<UpdateAddHtlc>()
         val aliceCommitSig = alice2bob.expect<CommitSig>()
@@ -503,7 +503,7 @@ class PeerTest : LightningTestSuite() {
         bob.send(ReceivePayment(randomBytes32(), 15_000_000.msat, Either.Left("test invoice"), null, deferredInvoice))
         val invoice = deferredInvoice.await()
 
-        alice.send(SendPaymentNormal(UUID.randomUUID(), invoice.amount!!, alice.remoteNodeId, OutgoingPayment.Details.Normal(invoice)))
+        alice.send(SendPaymentNormal(UUID.randomUUID(), invoice.amount!!, alice.remoteNodeId, LightningOutgoingPayment.Details.Normal(invoice)))
 
         alice.expectState<Normal> { commitments.availableBalanceForReceive() > alice0.commitments.availableBalanceForReceive() }
     }

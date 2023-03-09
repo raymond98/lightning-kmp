@@ -78,21 +78,21 @@ class WaitForFundingSignedTestsCommon : LightningTestSuite() {
 
     @Test
     fun `recv CommitSig -- with channel origin -- pay-to-open`() {
-        val channelOrigin = ChannelOrigin.PayToOpenOrigin(randomBytes32(), 42.sat)
+        val channelOrigin = ChannelOrigin.PayToOpenOrigin(randomBytes32(), 42.sat, TestConstants.alicePushAmount)
         val (_, commitSigAlice, bob, _) = init(bobFundingAmount = 0.sat, alicePushAmount = TestConstants.alicePushAmount, bobPushAmount = 0.msat, channelOrigin = channelOrigin)
         val (bob1, actionsBob1) = bob.process(ChannelCommand.MessageReceived(commitSigAlice))
         assertIs<LNChannel<WaitForFundingConfirmed>>(bob1)
         assertEquals(actionsBob1.size, 5)
         assertFalse(actionsBob1.hasOutgoingMessage<TxSignatures>().channelData.isEmpty())
         actionsBob1.has<ChannelAction.Storage.StoreState>()
-        actionsBob1.contains(ChannelAction.Storage.StoreIncomingPayment(TestConstants.alicePushAmount, setOf(), channelOrigin))
+        actionsBob1.contains(ChannelAction.Storage.StoreIncomingPayment(channelOrigin, setOf(), bob1.commitments.latest.fundingTxId, bob1.commitments.latest.fundingTxIndex))
         actionsBob1.hasWatch<WatchConfirmed>()
         actionsBob1.has<ChannelAction.EmitEvent>()
     }
 
     @Test
     fun `recv CommitSig -- with channel origin -- dual-swap-in`() {
-        val channelOrigin = ChannelOrigin.PleaseOpenChannelOrigin(randomBytes32(), 2500.msat, 0.sat)
+        val channelOrigin = ChannelOrigin.PleaseOpenChannelOrigin(randomBytes32(), 2500.msat, 0.sat, TestConstants.bobFundingAmount.toMilliSatoshi() - TestConstants.bobPushAmount)
         val (_, commitSigAlice, bob, _) = init(alicePushAmount = 0.msat, channelOrigin = channelOrigin)
         val (bob1, actionsBob1) = bob.process(ChannelCommand.MessageReceived(commitSigAlice))
         assertIs<LNChannel<WaitForFundingConfirmed>>(bob1)
@@ -101,7 +101,7 @@ class WaitForFundingSignedTestsCommon : LightningTestSuite() {
         actionsBob1.has<ChannelAction.Storage.StoreState>()
         val incomingPayment = actionsBob1.find<ChannelAction.Storage.StoreIncomingPayment>()
         assertEquals(incomingPayment.amount, TestConstants.bobFundingAmount.toMilliSatoshi() - TestConstants.bobPushAmount)
-        assertEquals(incomingPayment.origin, channelOrigin)
+        assertEquals(incomingPayment.channelOrigin, channelOrigin)
         assertTrue(incomingPayment.localInputs.isNotEmpty())
         actionsBob1.hasWatch<WatchConfirmed>()
         actionsBob1.has<ChannelAction.EmitEvent>()

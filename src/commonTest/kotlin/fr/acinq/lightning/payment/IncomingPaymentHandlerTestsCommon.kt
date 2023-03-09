@@ -399,27 +399,14 @@ class IncomingPaymentHandlerTestsCommon : LightningTestSuite() {
     }
 
     @Test
-    fun `process incoming amount with unknown origin`() = runSuspendTest {
-        val channelId = randomBytes32()
-        val amountOrigin = ChannelAction.Storage.StoreIncomingPayment(amount = 15_000_000.msat, localInputs = setOf(), origin = null)
-        val handler = IncomingPaymentHandler(TestConstants.Bob.nodeParams, TestConstants.Bob.walletParams, InMemoryPaymentsDb())
-        handler.process(channelId, amountOrigin)
-        val dbPayment = handler.db.getIncomingPayment(channelId.sha256().sha256())
-        assertNotNull(dbPayment)
-        assertTrue { dbPayment.origin is IncomingPayment.Origin.SwapIn }
-        val newChannelUUID = dbPayment.received!!.receivedWith.filterIsInstance<IncomingPayment.ReceivedWith.NewChannel>().first().id
-        assertEquals(setOf(IncomingPayment.ReceivedWith.NewChannel(id = newChannelUUID, amount = amountOrigin.amount, serviceFee = 0.msat, channelId = channelId)), dbPayment.received?.receivedWith)
-        assertEquals(15_000_000.msat, dbPayment.received?.amount)
-    }
-
-    @Test
     fun `process incoming amount with pay-to-open origin`() = runSuspendTest {
         val preimage = randomBytes32()
         val channelId = randomBytes32()
         val amountOrigin = ChannelAction.Storage.StoreIncomingPayment(
-            amount = 15_000_000.msat,
-            localInputs = setOf(),
-            origin = ChannelOrigin.PayToOpenOrigin(paymentHash = preimage.sha256(), serviceFee = 1_000.sat)
+            channelOrigin = ChannelOrigin.PayToOpenOrigin(amount = 15_000_000.msat, paymentHash = preimage.sha256(), serviceFee = 1_000.sat),
+            localInputs = emptySet(),
+            fundingTxId = randomBytes32(),
+            fundingTxIndex = 0
         )
         val handler = IncomingPaymentHandler(TestConstants.Bob.nodeParams, TestConstants.Bob.walletParams, InMemoryPaymentsDb())
         // simulate payment processed as a pay-to-open
@@ -440,9 +427,10 @@ class IncomingPaymentHandlerTestsCommon : LightningTestSuite() {
     fun `process incoming amount with please-open-channel origin`() = runSuspendTest {
         val channelId = randomBytes32()
         val amountOrigin = ChannelAction.Storage.StoreIncomingPayment(
-            amount = 33_000_000.msat,
+            channelOrigin = ChannelOrigin.PleaseOpenChannelOrigin(amount = 33_000_000.msat, requestId = randomBytes32(), serviceFee = 1_200_000.msat, miningFee = 0.sat),
             localInputs = setOf(OutPoint(randomBytes32(), 7)),
-            origin = ChannelOrigin.PleaseOpenChannelOrigin(randomBytes32(), 1_200_000.msat, 0.sat)
+            fundingTxId = randomBytes32(),
+            fundingTxIndex = 0
         )
         val handler = IncomingPaymentHandler(TestConstants.Bob.nodeParams, TestConstants.Bob.walletParams, InMemoryPaymentsDb())
         handler.process(channelId, amountOrigin)

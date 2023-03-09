@@ -82,7 +82,7 @@ data class WaitForFundingSigned(
                             // We're not a liquidity provider, so we don't mind sending our signatures immediately.
                             add(ChannelAction.Message.Send(signedFundingTx.localSigs))
                             // If we receive funds as part of the channel creation, we will add it to our payments db
-                            channelOrigin?.let { add(ChannelAction.Storage.StoreIncomingPayment(channelOrigin, localInputs = fundingTx.localInputs.map { it.outPoint }.toSet())) }
+                            channelOrigin?.let { add(ChannelAction.Storage.StoreIncomingPayment(channelOrigin, localInputs = fundingTx.localInputs.map { it.outPoint }.toSet(), fundingTxId = commitment.fundingTxId, fundingTxIndex = commitment.fundingTxIndex)) }
                         }
                         if (staticParams.useZeroConf) {
                             logger.info { "channel is using 0-conf, we won't wait for the funding tx to confirm" }

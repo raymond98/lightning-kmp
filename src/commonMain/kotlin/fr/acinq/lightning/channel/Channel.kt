@@ -12,7 +12,7 @@ import fr.acinq.lightning.channel.Helpers.Closing.claimRemoteCommitTxOutputs
 import fr.acinq.lightning.channel.Helpers.Closing.claimRevokedRemoteCommitTxOutputs
 import fr.acinq.lightning.channel.Helpers.Closing.getRemotePerCommitmentSecret
 import fr.acinq.lightning.crypto.KeyManager
-import fr.acinq.lightning.db.OutgoingPayment
+import fr.acinq.lightning.db.LightningOutgoingPayment
 import fr.acinq.lightning.serialization.Encryption.from
 import fr.acinq.lightning.transactions.Transactions.TransactionWithInputInfo.ClosingTx
 import fr.acinq.lightning.transactions.outgoings
@@ -86,10 +86,10 @@ sealed class ChannelAction {
         data class HtlcInfo(val channelId: ByteVector32, val commitmentNumber: Long, val paymentHash: ByteVector32, val cltvExpiry: CltvExpiry)
         data class StoreHtlcInfos(val htlcs: List<HtlcInfo>) : Storage()
         data class GetHtlcInfos(val revokedCommitTxId: ByteVector32, val commitmentNumber: Long) : Storage()
-        data class StoreIncomingPayment(val channelOrigin: ChannelOrigin, val localInputs: Set<OutPoint>) : Storage() { val amount = channelOrigin.amount }
-        data class StoreOutgoingPayment(val channelOrigin: ChannelOrigin, val localInputs: Set<OutPoint>) : Storage() { val amount = channelOrigin.amount }
+        data class StoreIncomingPayment(val channelOrigin: ChannelOrigin, val localInputs: Set<OutPoint>, val fundingTxId: ByteVector32, val fundingTxIndex: Long) : Storage() { val amount = channelOrigin.amount }
+        data class StoreOutgoingPayment(val amount: Satoshi, val miningFees: Satoshi, val scriptPubKey: ByteVector, val fundingTxId: ByteVector32, val fundingTxIndex: Long) : Storage()
         data class StoreChannelClosing(val amount: MilliSatoshi, val closingAddress: String, val isSentToDefaultAddress: Boolean) : Storage()
-        data class StoreChannelClosed(val closingTxs: List<OutgoingPayment.ClosingTxPart>) : Storage()
+        data class StoreChannelClosed(val closingTxs: List<LightningOutgoingPayment.ClosingTxPart>) : Storage()
     }
 
     data class ProcessIncomingHtlc(val add: UpdateAddHtlc) : ChannelAction()

@@ -10,9 +10,7 @@ import fr.acinq.lightning.blockchain.fee.FeeratePerKw
 import fr.acinq.lightning.blockchain.fee.OnChainFeerates
 import fr.acinq.lightning.channel.*
 import fr.acinq.lightning.crypto.noise.*
-import fr.acinq.lightning.db.Databases
-import fr.acinq.lightning.db.IncomingPayment
-import fr.acinq.lightning.db.OutgoingPayment
+import fr.acinq.lightning.db.*
 import fr.acinq.lightning.payment.IncomingPaymentHandler
 import fr.acinq.lightning.payment.OutgoingPaymentFailure
 import fr.acinq.lightning.payment.OutgoingPaymentHandler
@@ -69,7 +67,7 @@ interface SendPayment {
     val paymentId: UUID
     val amount: MilliSatoshi
     val recipient: PublicKey
-    val details: OutgoingPayment.Details
+    val details: LightningOutgoingPayment.Details
     val trampolineFeesOverride: List<TrampolineFees>?
     val paymentRequest: PaymentRequest
     val paymentHash: ByteVector32 get() = details.paymentHash
@@ -79,7 +77,7 @@ data class SendPaymentNormal(
     override val paymentId: UUID,
     override val amount: MilliSatoshi,
     override val recipient: PublicKey,
-    override val details: OutgoingPayment.Details.Normal,
+    override val details: LightningOutgoingPayment.Details.Normal,
     override val trampolineFeesOverride: List<TrampolineFees>? = null
 ) : PaymentCommand(), SendPayment {
     override val paymentRequest = details.paymentRequest
@@ -89,7 +87,7 @@ data class SendPaymentSwapOut(
     override val paymentId: UUID,
     override val amount: MilliSatoshi,
     override val recipient: PublicKey,
-    override val details: OutgoingPayment.Details.SwapOut,
+    override val details: LightningOutgoingPayment.Details.SwapOut,
     override val trampolineFeesOverride: List<TrampolineFees>? = null
 ) : PaymentCommand(), SendPayment {
     override val paymentRequest = details.paymentRequest
@@ -102,7 +100,7 @@ data class PaymentRequestGenerated(val receivePayment: ReceivePayment, val reque
 data class PaymentReceived(val incomingPayment: IncomingPayment, val received: IncomingPayment.Received) : PeerEvent()
 data class PaymentProgress(val request: SendPayment, val fees: MilliSatoshi) : PeerEvent()
 data class PaymentNotSent(val request: SendPayment, val reason: OutgoingPaymentFailure) : PeerEvent()
-data class PaymentSent(val request: SendPayment, val payment: OutgoingPayment) : PeerEvent()
+data class PaymentSent(val request: SendPayment, val payment: LightningOutgoingPayment) : PeerEvent()
 data class ChannelClosing(val channelId: ByteVector32) : PeerEvent()
 
 data class SendSwapOutRequest(val amount: Satoshi, val bitcoinAddress: String, val feePerKw: Long) : PeerCommand()
@@ -445,8 +443,7 @@ class Peer(
                 val spliceCommand = Command.Splice.Request(
                     replyTo = CompletableDeferred(),
                     spliceIn = null,
-                    spliceOut = Command.Splice.Request.
-                    SpliceOut(amount, scriptPubKey),
+                    spliceOut = Command.Splice.Request.SpliceOut(amount, scriptPubKey),
                     feerate = feeratePerKw
                 )
                 send(WrappedChannelCommand(channel.channelId, ChannelCommand.ExecuteCommand(spliceCommand)))
@@ -531,6 +528,19 @@ class Peer(
                         incomingPaymentHandler.process(actualChannelId, action)
                     }
 
+                    action is ChannelAction.Storage.StoreOutgoingPayment -> {
+                        logger.info { "storing outgoing amount=${action.amount} scriptPubKey=${action.scriptPubKey}" }
+                        db.payments.addOutgoingPayment(
+                            SpliceOutgoingPayment(
+                                id = UUID.randomUUID(),
+                                amountSatoshi = action.amount,
+                                scriptPubKey = action.scriptPubKey,
+                                miningFees = action.miningFees,
+                                createdAt = currentTimestampMillis()
+                            )
+                        )
+                    }
+
                     action is ChannelAction.Storage.GetHtlcInfos -> {
                         val htlcInfos = db.channels.listHtlcInfos(actualChannelId, action.commitmentNumber).map { ChannelAction.Storage.HtlcInfo(actualChannelId, action.commitmentNumber, it.first, it.second) }
                         input.send(WrappedChannelCommand(actualChannelId, ChannelCommand.GetHtlcInfosResponse(action.revokedCommitTxId, htlcInfos)))
@@ -539,17 +549,17 @@ class Peer(
                     action is ChannelAction.Storage.StoreChannelClosing -> {
                         val dbId = UUID.fromBytes(channelId.take(16).toByteArray())
                         val recipient = if (action.isSentToDefaultAddress) nodeParams.nodeId else PublicKey.Generator
-                        val payment = OutgoingPayment(
+                        val payment = LightningOutgoingPayment(
                             id = dbId,
                             recipientAmount = action.amount,
                             recipient = recipient,
-                            details = OutgoingPayment.Details.ChannelClosing(
+                            details = LightningOutgoingPayment.Details.ChannelClosing(
                                 channelId = channelId,
                                 closingAddress = action.closingAddress,
                                 isSentToDefaultAddress = action.isSentToDefaultAddress
                             ),
                             parts = emptyList(),
-                            status = OutgoingPayment.Status.Pending
+                            status = LightningOutgoingPayment.Status.Pending
                         )
                         db.payments.addOutgoingPayment(payment)
                         _eventsFlow.emit(ChannelClosing(channelId))

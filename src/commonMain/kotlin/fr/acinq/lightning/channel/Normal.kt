@@ -211,7 +211,8 @@ data class Normal(
                                         // We're not a liquidity provider, so we don't mind sending our signatures immediately.
                                         add(ChannelAction.Message.Send(signedFundingTx.localSigs))
                                         // If we received or sent funds as part of the splice, we will add a corresponding entry to our incoming/outgoing payments db
-                                        addAll(spliceStatus.origins.map { channelOrigin -> ChannelAction.Storage.StoreIncomingPayment(channelOrigin, localInputs = spliceStatus.fundingTx.localInputs.map { it.outPoint }.toSet()) })
+                                        addAll(spliceStatus.origins.map { channelOrigin -> ChannelAction.Storage.StoreIncomingPayment(channelOrigin, localInputs = spliceStatus.fundingTx.localInputs.map { it.outPoint }.toSet(), commitment.fundingTxId, commitment.fundingTxIndex) })
+                                        addAll(spliceStatus.fundingParams.localOutputs.map { txOut -> ChannelAction.Storage.StoreOutgoingPayment(amount = txOut.amount, miningFees = spliceStatus.fundingTx.fees, txOut.publicKeyScript, commitment.fundingTxId, commitment.fundingTxIndex) })
                                         add(ChannelAction.Storage.StoreState(nextState))
                                     }
                                     Pair(nextState, actions)
