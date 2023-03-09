@@ -432,6 +432,27 @@ class Peer(
         input.send(cmd)
     }
 
+    /**
+     * Do a splice out using any suitable channel
+     * @return  [Command.Splice.Companion.Result] if a splice was attempted, or {null} if no suitable
+     *          channel was found
+     */
+    suspend fun spliceOut(amount: Satoshi, scriptPubKey: ByteVector, feeratePerKw: FeeratePerKw): Command.Splice.Companion.Result? {
+        return channels.values
+            .filterIsInstance<Normal>()
+            .firstOrNull { it.commitments.availableBalanceForSend() > amount }
+            ?.let { channel ->
+                val spliceCommand = Command.Splice(
+                    replyTo = CompletableDeferred(),
+                    spliceIn = null,
+                    spliceOut = Command.Splice.Companion.SpliceOut(amount, scriptPubKey),
+                    feerate = feeratePerKw
+                )
+                send(WrappedChannelCommand(channel.channelId, ChannelCommand.ExecuteCommand(spliceCommand)))
+                spliceCommand.replyTo.await()
+            }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun sendToPeer(msg: LightningMessage) {
         val encoded = LightningMessage.encode(msg)
@@ -491,7 +512,7 @@ class Peer(
                         when (val result = outgoingPaymentHandler.processAddSettled(action)) {
                             is OutgoingPaymentHandler.Success -> _eventsFlow.emit(PaymentSent(result.request, result.payment))
                             is OutgoingPaymentHandler.PreimageReceived -> logger.debug(mapOf("paymentId" to result.request.paymentId)) { "payment preimage received: ${result.preimage}" }
-                            null -> logger.debug{ "unknown payment" }
+                            null -> logger.debug { "unknown payment" }
                         }
                     }
 

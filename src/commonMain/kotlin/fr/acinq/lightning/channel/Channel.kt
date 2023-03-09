@@ -106,15 +106,6 @@ sealed class ChannelAction {
         data class AddFailed(val cmd: CMD_ADD_HTLC, val error: ChannelException, val channelUpdate: ChannelUpdate?) : ProcessCmdRes() {
             override fun toString() = "cannot add htlc with paymentId=${cmd.paymentId} reason=${error.message}"
         }
-
-        sealed class SpliceFailure() : ProcessCmdRes() {
-            object InsufficientFunds : SpliceFailure()
-            object InvalidSpliceOutPubKeyScript : SpliceFailure()
-            object SpliceAlreadyInProgress : SpliceFailure()
-            object ChannelNotIdle : SpliceFailure()
-        }
-
-        data class SpliceSuccess(val channelId: ByteVector32, val fundingTxIndex: Long, val fundingTxId: ByteVector32, val capacity: Satoshi, val balance: MilliSatoshi) : ProcessCmdRes()
     }
 
     sealed class HtlcResult {
