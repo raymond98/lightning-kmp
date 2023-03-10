@@ -1,7 +1,6 @@
 package fr.acinq.lightning.channel
 
 import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.crypto.Pack
 import fr.acinq.lightning.ChannelEvents
@@ -11,10 +10,9 @@ import fr.acinq.lightning.blockchain.BITCOIN_FUNDING_DEPTHOK
 import fr.acinq.lightning.blockchain.WatchConfirmed
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.crypto.ShaChain
-import fr.acinq.lightning.db.IncomingPayment
 import fr.acinq.lightning.utils.Either
 import fr.acinq.lightning.utils.msat
-import fr.acinq.lightning.utils.toMilliSatoshi
+import fr.acinq.lightning.utils.sat
 import fr.acinq.lightning.wire.*
 import kotlin.math.absoluteValue
 
@@ -82,7 +80,16 @@ data class WaitForFundingSigned(
                             // We're not a liquidity provider, so we don't mind sending our signatures immediately.
                             add(ChannelAction.Message.Send(signedFundingTx.localSigs))
                             // If we receive funds as part of the channel creation, we will add it to our payments db
-                            channelOrigin?.let { add(ChannelAction.Storage.StoreIncomingPayment(channelOrigin, localInputs = fundingTx.localInputs.map { it.outPoint }.toSet(), fundingTxId = commitment.fundingTxId, fundingTxIndex = commitment.fundingTxIndex)) }
+                            if (commitment.localCommit.spec.toLocal > 0.msat) add(
+                                ChannelAction.Storage.StoreIncomingPayment.ViaNewChannel(
+                                    amount = commitment.localCommit.spec.toLocal,
+                                    serviceFee = channelOrigin?.serviceFee ?: 0.msat,
+                                    miningFee = channelOrigin?.miningFee ?: 0.sat,
+                                    localInputs = fundingTx.localInputs.map { it.outPoint }.toSet(),
+                                    txId = signedFundingTx.txId,
+                                    channelOrigin = channelOrigin
+                                )
+                            )
                         }
                         if (staticParams.useZeroConf) {
                             logger.info { "channel is using 0-conf, we won't wait for the funding tx to confirm" }

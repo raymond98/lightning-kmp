@@ -524,17 +524,17 @@ class Peer(
                     }
 
                     action is ChannelAction.Storage.StoreIncomingPayment -> {
-                        logger.info { "storing incoming amount=${action.amount} with origin=${action.channelOrigin}" }
+                        logger.info { "storing incoming payment $action" }
                         incomingPaymentHandler.process(actualChannelId, action)
                     }
 
                     action is ChannelAction.Storage.StoreOutgoingPayment -> {
-                        logger.info { "storing outgoing amount=${action.amount} scriptPubKey=${action.scriptPubKey}" }
+                        logger.info { "storing outgoing amount=${action.amount} address=${action.address}" }
                         db.payments.addOutgoingPayment(
                             SpliceOutgoingPayment(
                                 id = UUID.randomUUID(),
                                 amountSatoshi = action.amount,
-                                scriptPubKey = action.scriptPubKey,
+                                address = action.address,
                                 miningFees = action.miningFees,
                                 createdAt = currentTimestampMillis()
                             )

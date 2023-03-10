@@ -14,6 +14,7 @@ import fr.acinq.lightning.channel.Helpers.Closing.getRemotePerCommitmentSecret
 import fr.acinq.lightning.crypto.KeyManager
 import fr.acinq.lightning.db.LightningOutgoingPayment
 import fr.acinq.lightning.serialization.Encryption.from
+import fr.acinq.lightning.serialization.v2.MilliSatoshiSerializer
 import fr.acinq.lightning.transactions.Transactions.TransactionWithInputInfo.ClosingTx
 import fr.acinq.lightning.transactions.outgoings
 import fr.acinq.lightning.utils.*
@@ -86,8 +87,24 @@ sealed class ChannelAction {
         data class HtlcInfo(val channelId: ByteVector32, val commitmentNumber: Long, val paymentHash: ByteVector32, val cltvExpiry: CltvExpiry)
         data class StoreHtlcInfos(val htlcs: List<HtlcInfo>) : Storage()
         data class GetHtlcInfos(val revokedCommitTxId: ByteVector32, val commitmentNumber: Long) : Storage()
-        data class StoreIncomingPayment(val channelOrigin: ChannelOrigin, val localInputs: Set<OutPoint>, val fundingTxId: ByteVector32, val fundingTxIndex: Long) : Storage() { val amount = channelOrigin.amount }
-        data class StoreOutgoingPayment(val amount: Satoshi, val miningFees: Satoshi, val scriptPubKey: ByteVector, val fundingTxId: ByteVector32, val fundingTxIndex: Long) : Storage()
+        /** Payment received through on-chain operations (channel creation or splice-in) */
+        sealed class StoreIncomingPayment : Storage() {
+            abstract val amount: MilliSatoshi
+            abstract val serviceFee: MilliSatoshi
+            abstract val miningFee: Satoshi
+            abstract val txId: ByteVector32
+            data class ViaNewChannel(override val amount: MilliSatoshi, override val serviceFee: MilliSatoshi, override val miningFee: Satoshi, val localInputs: Set<OutPoint>, override val txId: ByteVector32, val channelOrigin: ChannelOrigin?) : StoreIncomingPayment()
+            data class ViaSpliceIn(override val amount: MilliSatoshi, override val serviceFee: MilliSatoshi, override val miningFee: Satoshi, val localInputs: Set<OutPoint>, override val txId: ByteVector32) : StoreIncomingPayment()
+        }
+        /** Payment received through on-chain operations (channel close or splice-out) */
+        sealed class StoreOutgoingPayment : Storage() {
+            abstract val amount: Satoshi
+            abstract val miningFees: Satoshi
+            abstract val address: String
+            abstract val txId: ByteVector32
+            data class ViaSpliceOut(override val amount: Satoshi, override val miningFees: Satoshi, override val address: String, override val txId: ByteVector32) : StoreOutgoingPayment()
+            data class ViaClose(override val amount: Satoshi, override val miningFees: Satoshi, override val address: String, override val txId: ByteVector32) : StoreOutgoingPayment()
+        }
         data class StoreChannelClosing(val amount: MilliSatoshi, val closingAddress: String, val isSentToDefaultAddress: Boolean) : Storage()
         data class StoreChannelClosed(val closingTxs: List<LightningOutgoingPayment.ClosingTxPart>) : Storage()
     }

@@ -109,23 +109,39 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
      * - for unknown origin, the amount is handled as a swap-in coming from an unknown address.
      */
     suspend fun process(channelId: ByteVector32, action: ChannelAction.Storage.StoreIncomingPayment) {
-        val fakePreimage = channelId.sha256()
-        when (action.channelOrigin) {
-            is ChannelOrigin.PayToOpenOrigin -> {
-                // In that case, the pay-to-open payment parts have already been handled in the main `processPaymentPart` handler. We just need
-                // to update the channel id of the pay-to-open received-with parts with type new-channel.
-                db.updateNewChannelReceivedWithChannelId(action.channelOrigin.paymentHash, channelId)
+        when (action) {
+            is ChannelAction.Storage.StoreIncomingPayment.ViaNewChannel -> when (action.channelOrigin) {
+                is ChannelOrigin.PayToOpenOrigin -> {
+                    // In that case, the pay-to-open payment parts have already been handled in the main `processPaymentPart` handler. We just need
+                    // to update the channel id of the pay-to-open received-with parts with type new-channel.
+                    db.updateNewChannelReceivedWithChannelId(action.channelOrigin.paymentHash, channelId)
+                }
+                else -> {
+                    db.addAndReceivePayment(
+                        preimage = randomBytes32(), // not used, placeholder
+                        origin = IncomingPayment.Origin.OnChain(action.txId, action.localInputs),
+                        receivedWith = setOf(
+                            IncomingPayment.ReceivedWith.NewChannel(
+                                id = UUID.randomUUID(),
+                                amount = action.amount,
+                                serviceFee = action.serviceFee,
+                                fundingFee = action.miningFee,
+                                channelId = channelId
+                            )
+                        )
+                    )
+                }
             }
-            is ChannelOrigin.PleaseOpenChannelOrigin -> {
+            is ChannelAction.Storage.StoreIncomingPayment.ViaSpliceIn -> {
                 db.addAndReceivePayment(
-                    preimage = fakePreimage,
-                    origin = IncomingPayment.Origin.DualSwapIn(action.localInputs),
+                    preimage = randomBytes32(), // not used, placeholder
+                    origin = IncomingPayment.Origin.OnChain(action.txId, action.localInputs),
                     receivedWith = setOf(
-                        IncomingPayment.ReceivedWith.NewChannel(
+                        IncomingPayment.ReceivedWith.SpliceIn(
                             id = UUID.randomUUID(),
                             amount = action.amount,
-                            serviceFee = action.channelOrigin.serviceFee,
-                            fundingFee = action.channelOrigin.miningFee,
+                            serviceFee = action.serviceFee,
+                            fundingFee = action.miningFee,
                             channelId = channelId
                         )
                     )
@@ -168,7 +184,7 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
     /** Main payment processing, that handles payment parts. */
     private suspend fun processPaymentPart(paymentPart: PaymentPart, currentBlockHeight: Int): ProcessAddResult {
         val logger = MDCLogger(logger.logger, staticMdc = paymentPart.mdc())
-        when(paymentPart) {
+        when (paymentPart) {
             is HtlcPart -> logger.info { "processing htlc part expiry=${paymentPart.htlc.cltvExpiry}" }
             is PayToOpenPart -> logger.info { "processing pay-to-open part amount=${paymentPart.payToOpenRequest.amountMsat} funding=${paymentPart.payToOpenRequest.fundingSatoshis} fees=${paymentPart.payToOpenRequest.payToOpenFeeSatoshis}" }
         }

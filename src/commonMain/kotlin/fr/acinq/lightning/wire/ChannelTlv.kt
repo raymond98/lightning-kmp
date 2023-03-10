@@ -11,10 +11,7 @@ import fr.acinq.lightning.MilliSatoshi
 import fr.acinq.lightning.ShortChannelId
 import fr.acinq.lightning.channel.ChannelOrigin
 import fr.acinq.lightning.channel.ChannelType
-import fr.acinq.lightning.utils.msat
-import fr.acinq.lightning.utils.sat
-import fr.acinq.lightning.utils.toByteVector
-import fr.acinq.lightning.utils.toByteVector32
+import fr.acinq.lightning.utils.*
 
 sealed class ChannelTlv : Tlv {
     /** Commitment to where the funds will go in case of a mutual close, which remote node will enforce in case we're compromised. */
@@ -95,7 +92,7 @@ sealed class ChannelTlv : Tlv {
                 val origin = when (LightningCodecs.u16(input)) {
                     1 -> ChannelOrigin.PayToOpenOrigin(
                         paymentHash = LightningCodecs.bytes(input, 32).byteVector32(),
-                        serviceFee = LightningCodecs.u64(input).sat,
+                        serviceFee = LightningCodecs.u64(input).sat.toMilliSatoshi(),
                         amount = LightningCodecs.u64(input).msat
                     )
 

@@ -12,6 +12,7 @@ import fr.acinq.lightning.transactions.Scripts
 import fr.acinq.lightning.transactions.Transactions.TransactionWithInputInfo.*
 import fr.acinq.lightning.utils.LoggingContext
 import fr.acinq.lightning.wire.ClosingSigned
+import fr.acinq.lightning.utils.sat
 
 /**
  * Details about a force-close where we published our commitment.
@@ -420,6 +421,8 @@ data class ClosingTxProposed(val unsignedTx: ClosingTx, val localClosingSigned: 
 /** This gives the reason for creating a new channel. */
 sealed class ChannelOrigin {
     abstract val amount: MilliSatoshi
-    data class PayToOpenOrigin(val paymentHash: ByteVector32, val serviceFee: Satoshi, override val amount: MilliSatoshi) : ChannelOrigin()
-    data class PleaseOpenChannelOrigin(val requestId: ByteVector32, val serviceFee: MilliSatoshi, val miningFee: Satoshi, override val amount: MilliSatoshi) : ChannelOrigin()
+    abstract val serviceFee: MilliSatoshi
+    abstract val miningFee: Satoshi
+    data class PayToOpenOrigin(val paymentHash: ByteVector32, override val serviceFee: MilliSatoshi, override val amount: MilliSatoshi) : ChannelOrigin() { override val miningFee: Satoshi = 0.sat }
+    data class PleaseOpenChannelOrigin(val requestId: ByteVector32, override val serviceFee: MilliSatoshi, override val miningFee: Satoshi, override val amount: MilliSatoshi) : ChannelOrigin()
 }

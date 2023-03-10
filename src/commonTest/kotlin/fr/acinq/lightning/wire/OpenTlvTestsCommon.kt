@@ -64,7 +64,7 @@ class OpenTlvTestsCommon : LightningTestSuite() {
     fun `channel origin TLV`() {
         val testCases = listOf(
             Pair(
-                ChannelOrigin.PayToOpenOrigin(ByteVector32.fromValidHex("187bf923f7f11ef732b73c417eb5a57cd4667b20a6f130ff505cd7ad3ab87281"), 1234.sat, 0.msat),
+                ChannelOrigin.PayToOpenOrigin(ByteVector32.fromValidHex("187bf923f7f11ef732b73c417eb5a57cd4667b20a6f130ff505cd7ad3ab87281"), 1234_000.msat, 0.msat),
                 Hex.decode("fe47000005 2a 0001 187bf923f7f11ef732b73c417eb5a57cd4667b20a6f130ff505cd7ad3ab87281 00000000000004d2")
             ),
             Pair(

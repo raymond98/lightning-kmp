@@ -159,7 +159,7 @@ class PaymentsDbTestsCommon : LightningTestSuite() {
         val db = InMemoryPaymentsDb()
         val preimage = randomBytes32()
         val channelId = randomBytes32()
-        val origin = IncomingPayment.Origin.DualSwapIn(setOf(OutPoint(randomBytes32(), 3)))
+        val origin = IncomingPayment.Origin.OnChain(randomBytes32(), setOf(OutPoint(randomBytes32(), 3)))
         val receivedWith = setOf(IncomingPayment.ReceivedWith.NewChannel(amount = 50_000_000.msat, serviceFee = 1_234.msat, channelId = channelId, id = UUID.randomUUID()))
         assertNull(db.getIncomingPayment(randomBytes32()))
 

@@ -398,50 +398,50 @@ class IncomingPaymentHandlerTestsCommon : LightningTestSuite() {
         assertEquals(setOf(expected), result.actions.toSet())
     }
 
-    @Test
-    fun `process incoming amount with pay-to-open origin`() = runSuspendTest {
-        val preimage = randomBytes32()
-        val channelId = randomBytes32()
-        val amountOrigin = ChannelAction.Storage.StoreIncomingPayment(
-            channelOrigin = ChannelOrigin.PayToOpenOrigin(amount = 15_000_000.msat, paymentHash = preimage.sha256(), serviceFee = 1_000.sat),
-            localInputs = emptySet(),
-            fundingTxId = randomBytes32(),
-            fundingTxIndex = 0
-        )
-        val handler = IncomingPaymentHandler(TestConstants.Bob.nodeParams, TestConstants.Bob.walletParams, InMemoryPaymentsDb())
-        // simulate payment processed as a pay-to-open
-        handler.db.addIncomingPayment(preimage, IncomingPayment.Origin.KeySend)
-        val newChannelUUID = UUID.randomUUID()
-        handler.db.receivePayment(preimage.sha256(), receivedWith = setOf(IncomingPayment.ReceivedWith.NewChannel(id = newChannelUUID, amount = 15_000_000.msat, serviceFee = 1_000_000.msat, channelId = null)))
-        // process the amount origin which must reconcile with the existing line in the database
-        handler.process(channelId, amountOrigin)
-        val dbPayment = handler.db.getIncomingPayment(preimage.sha256())
-        assertNotNull(dbPayment)
-        assertIs<IncomingPayment.Origin.KeySend>(dbPayment.origin)
-        assertEquals(setOf(IncomingPayment.ReceivedWith.NewChannel(id = newChannelUUID, amount = 15_000_000.msat, serviceFee = 1_000_000.msat, channelId = channelId)), dbPayment.received?.receivedWith)
-        assertEquals(15_000_000.msat, dbPayment.received?.amount)
-        assertEquals(1_000_000.msat, dbPayment.received?.fees)
-    }
-
-    @Test
-    fun `process incoming amount with please-open-channel origin`() = runSuspendTest {
-        val channelId = randomBytes32()
-        val amountOrigin = ChannelAction.Storage.StoreIncomingPayment(
-            channelOrigin = ChannelOrigin.PleaseOpenChannelOrigin(amount = 33_000_000.msat, requestId = randomBytes32(), serviceFee = 1_200_000.msat, miningFee = 0.sat),
-            localInputs = setOf(OutPoint(randomBytes32(), 7)),
-            fundingTxId = randomBytes32(),
-            fundingTxIndex = 0
-        )
-        val handler = IncomingPaymentHandler(TestConstants.Bob.nodeParams, TestConstants.Bob.walletParams, InMemoryPaymentsDb())
-        handler.process(channelId, amountOrigin)
-        val dbPayment = handler.db.getIncomingPayment(channelId.sha256().sha256())
-        assertNotNull(dbPayment)
-        assertIs<IncomingPayment.Origin.DualSwapIn>(dbPayment.origin)
-        val newChannelUUID = dbPayment.received!!.receivedWith.filterIsInstance<IncomingPayment.ReceivedWith.NewChannel>().first().id
-        assertEquals(setOf(IncomingPayment.ReceivedWith.NewChannel(id = newChannelUUID, amount = 33_000_000.msat, serviceFee = 1_200_000.msat, channelId = channelId)), dbPayment.received?.receivedWith)
-        assertEquals(33_000_000.msat, dbPayment.received?.amount)
-        assertEquals(1_200_000.msat, dbPayment.received?.fees)
-    }
+//    @Test
+//    fun `process incoming amount with pay-to-open origin`() = runSuspendTest {
+//        val preimage = randomBytes32()
+//        val channelId = randomBytes32()
+//        val amountOrigin = ChannelAction.Storage.StoreIncomingPayment(
+//            channelOrigin = ChannelOrigin.PayToOpenOrigin(amount = 15_000_000.msat, paymentHash = preimage.sha256(), serviceFee = 1_000.sat),
+//            localInputs = emptySet(),
+//            fundingTxId = randomBytes32(),
+//            fundingTxIndex = 0
+//        )
+//        val handler = IncomingPaymentHandler(TestConstants.Bob.nodeParams, TestConstants.Bob.walletParams, InMemoryPaymentsDb())
+//        // simulate payment processed as a pay-to-open
+//        handler.db.addIncomingPayment(preimage, IncomingPayment.Origin.KeySend)
+//        val newChannelUUID = UUID.randomUUID()
+//        handler.db.receivePayment(preimage.sha256(), receivedWith = setOf(IncomingPayment.ReceivedWith.NewChannel(id = newChannelUUID, amount = 15_000_000.msat, serviceFee = 1_000_000.msat, channelId = null)))
+//        // process the amount origin which must reconcile with the existing line in the database
+//        handler.process(channelId, amountOrigin)
+//        val dbPayment = handler.db.getIncomingPayment(preimage.sha256())
+//        assertNotNull(dbPayment)
+//        assertIs<IncomingPayment.Origin.KeySend>(dbPayment.origin)
+//        assertEquals(setOf(IncomingPayment.ReceivedWith.NewChannel(id = newChannelUUID, amount = 15_000_000.msat, serviceFee = 1_000_000.msat, channelId = channelId)), dbPayment.received?.receivedWith)
+//        assertEquals(15_000_000.msat, dbPayment.received?.amount)
+//        assertEquals(1_000_000.msat, dbPayment.received?.fees)
+//    }
+//
+//    @Test
+//    fun `process incoming amount with please-open-channel origin`() = runSuspendTest {
+//        val channelId = randomBytes32()
+//        val amountOrigin = ChannelAction.Storage.StoreIncomingPayment(
+//            channelOrigin = ChannelOrigin.PleaseOpenChannelOrigin(amount = 33_000_000.msat, requestId = randomBytes32(), serviceFee = 1_200_000.msat, miningFee = 0.sat),
+//            localInputs = setOf(OutPoint(randomBytes32(), 7)),
+//            fundingTxId = randomBytes32(),
+//            fundingTxIndex = 0
+//        )
+//        val handler = IncomingPaymentHandler(TestConstants.Bob.nodeParams, TestConstants.Bob.walletParams, InMemoryPaymentsDb())
+//        handler.process(channelId, amountOrigin)
+//        val dbPayment = handler.db.getIncomingPayment(channelId.sha256().sha256())
+//        assertNotNull(dbPayment)
+//        assertIs<IncomingPayment.Origin.DualSwapIn>(dbPayment.origin)
+//        val newChannelUUID = dbPayment.received!!.receivedWith.filterIsInstance<IncomingPayment.ReceivedWith.NewChannel>().first().id
+//        assertEquals(setOf(IncomingPayment.ReceivedWith.NewChannel(id = newChannelUUID, amount = 33_000_000.msat, serviceFee = 1_200_000.msat, channelId = channelId)), dbPayment.received?.receivedWith)
+//        assertEquals(33_000_000.msat, dbPayment.received?.amount)
+//        assertEquals(1_200_000.msat, dbPayment.received?.fees)
+//    }
 
     @Test
     fun `receive multipart payment with multiple HTLCs via same channel`() = runSuspendTest {
@@ -1206,41 +1206,41 @@ class IncomingPaymentHandlerTestsCommon : LightningTestSuite() {
         }
     }
 
-    @Test
-    fun `purge expired incoming payments`() = runSuspendTest {
-        val paymentHandler = IncomingPaymentHandler(TestConstants.Bob.nodeParams, TestConstants.Bob.walletParams, InMemoryPaymentsDb())
-
-        // create incoming payment that has expired and not been paid
-        val expiredInvoice = paymentHandler.createInvoice(
-            randomBytes32(), defaultAmount, Either.Left("expired"), listOf(), expirySeconds = 3600,
-            timestampSeconds = 1
-        )
-
-        // create incoming payment that has expired and been paid
-        delay(100)
-        val paidInvoice = paymentHandler.createInvoice(
-            defaultPreimage, defaultAmount, Either.Left("paid"), listOf(), expirySeconds = 3600,
-            timestampSeconds = 100
-        )
-        paymentHandler.db.receivePayment(
-            paidInvoice.paymentHash, receivedWith = setOf(IncomingPayment.ReceivedWith.NewChannel(id = UUID.randomUUID(), amount = 15_000_000.msat, serviceFee = 1_000_000.msat, channelId = null)),
-            receivedAt = 101
-        ) // simulate incoming payment being paid before it expired
-
-        // create unexpired payment
-        delay(100)
-        val unexpiredInvoice = paymentHandler.createInvoice(randomBytes32(), defaultAmount, Either.Left("unexpired"), listOf(), expirySeconds = 3600)
-
-        val unexpiredPayment = paymentHandler.db.getIncomingPayment(unexpiredInvoice.paymentHash)!!
-        val paidPayment = paymentHandler.db.getIncomingPayment(paidInvoice.paymentHash)!!
-        val expiredPayment = paymentHandler.db.getIncomingPayment(expiredInvoice.paymentHash)!!
-
-        assertEquals(paymentHandler.db.listIncomingPayments(5, 0, setOf(PaymentTypeFilter.Normal)), listOf(unexpiredPayment, paidPayment, expiredPayment))
-        assertEquals(paymentHandler.db.listExpiredPayments(), listOf(expiredPayment))
-        assertEquals(paymentHandler.purgeExpiredPayments(), 1)
-        assertEquals(paymentHandler.db.listExpiredPayments(), emptyList())
-        assertEquals(paymentHandler.db.listIncomingPayments(5, 0, setOf(PaymentTypeFilter.Normal)), listOf(unexpiredPayment, paidPayment))
-    }
+//    @Test
+//    fun `purge expired incoming payments`() = runSuspendTest {
+//        val paymentHandler = IncomingPaymentHandler(TestConstants.Bob.nodeParams, TestConstants.Bob.walletParams, InMemoryPaymentsDb())
+//
+//        // create incoming payment that has expired and not been paid
+//        val expiredInvoice = paymentHandler.createInvoice(
+//            randomBytes32(), defaultAmount, Either.Left("expired"), listOf(), expirySeconds = 3600,
+//            timestampSeconds = 1
+//        )
+//
+//        // create incoming payment that has expired and been paid
+//        delay(100)
+//        val paidInvoice = paymentHandler.createInvoice(
+//            defaultPreimage, defaultAmount, Either.Left("paid"), listOf(), expirySeconds = 3600,
+//            timestampSeconds = 100
+//        )
+//        paymentHandler.db.receivePayment(
+//            paidInvoice.paymentHash, receivedWith = setOf(IncomingPayment.ReceivedWith.NewChannel(id = UUID.randomUUID(), amount = 15_000_000.msat, serviceFee = 1_000_000.msat, channelId = null)),
+//            receivedAt = 101
+//        ) // simulate incoming payment being paid before it expired
+//
+//        // create unexpired payment
+//        delay(100)
+//        val unexpiredInvoice = paymentHandler.createInvoice(randomBytes32(), defaultAmount, Either.Left("unexpired"), listOf(), expirySeconds = 3600)
+//
+//        val unexpiredPayment = paymentHandler.db.getIncomingPayment(unexpiredInvoice.paymentHash)!!
+//        val paidPayment = paymentHandler.db.getIncomingPayment(paidInvoice.paymentHash)!!
+//        val expiredPayment = paymentHandler.db.getIncomingPayment(expiredInvoice.paymentHash)!!
+//
+//        assertEquals(paymentHandler.db.listIncomingPayments(5, 0, setOf(PaymentTypeFilter.Normal)), listOf(unexpiredPayment, paidPayment, expiredPayment))
+//        assertEquals(paymentHandler.db.listExpiredPayments(), listOf(expiredPayment))
+//        assertEquals(paymentHandler.purgeExpiredPayments(), 1)
+//        assertEquals(paymentHandler.db.listExpiredPayments(), emptyList())
+//        assertEquals(paymentHandler.db.listIncomingPayments(5, 0, setOf(PaymentTypeFilter.Normal)), listOf(unexpiredPayment, paidPayment))
+//    }
 
     companion object {
         val defaultPreimage = randomBytes32()

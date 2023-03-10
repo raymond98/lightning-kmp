@@ -10,10 +10,7 @@ import fr.acinq.lightning.blockchain.WatchEventConfirmed
 import fr.acinq.lightning.blockchain.WatchEventSpent
 import fr.acinq.lightning.router.Announcements
 import fr.acinq.lightning.transactions.Transactions
-import fr.acinq.lightning.utils.Either
-import fr.acinq.lightning.utils.msat
-import fr.acinq.lightning.utils.sat
-import fr.acinq.lightning.utils.toMilliSatoshi
+import fr.acinq.lightning.utils.*
 import fr.acinq.lightning.wire.*
 import kotlinx.coroutines.CompletableDeferred
 
@@ -210,9 +207,25 @@ data class Normal(
                                         add(ChannelAction.Blockchain.SendWatch(watchConfirmed))
                                         // We're not a liquidity provider, so we don't mind sending our signatures immediately.
                                         add(ChannelAction.Message.Send(signedFundingTx.localSigs))
+                                        // If we initiated the splice and added some funds ourselves
                                         // If we received or sent funds as part of the splice, we will add a corresponding entry to our incoming/outgoing payments db
-                                        addAll(spliceStatus.origins.map { channelOrigin -> ChannelAction.Storage.StoreIncomingPayment(channelOrigin, localInputs = spliceStatus.fundingTx.localInputs.map { it.outPoint }.toSet(), commitment.fundingTxId, commitment.fundingTxIndex) })
-                                        addAll(spliceStatus.fundingParams.localOutputs.map { txOut -> ChannelAction.Storage.StoreOutgoingPayment(amount = txOut.amount, miningFees = spliceStatus.fundingTx.fees, txOut.publicKeyScript, commitment.fundingTxId, commitment.fundingTxIndex) })
+                                        if (spliceStatus.fundingTx.localInputs.isNotEmpty()) add(
+                                            ChannelAction.Storage.StoreIncomingPayment.ViaSpliceIn(
+                                                amount = spliceStatus.fundingTx.localInputs.map { i -> i.previousTx.txOut[i.previousTxOutput.toInt()].amount }.sum().toMilliSatoshi() - spliceStatus.fundingTx.fees.toMilliSatoshi(),
+                                                serviceFee = 0.msat,
+                                                miningFee = spliceStatus.fundingTx.fees,
+                                                localInputs = spliceStatus.fundingTx.localInputs.map { it.outPoint }.toSet(),
+                                                txId = signedFundingTx.txId
+                                            )
+                                        )
+                                        addAll(spliceStatus.fundingParams.localOutputs.map { txOut ->
+                                            ChannelAction.Storage.StoreOutgoingPayment.ViaSpliceOut(
+                                                amount = txOut.amount,
+                                                miningFees = spliceStatus.fundingTx.fees,
+                                                address = Helpers.Closing.btcAddressFromScriptPubKey(scriptPubKey = txOut.publicKeyScript, chainHash = staticParams.nodeParams.chainHash) ?: "unknown",
+                                                txId = signedFundingTx.txId
+                                            )
+                                        })
                                         add(ChannelAction.Storage.StoreState(nextState))
                                     }
                                     Pair(nextState, actions)

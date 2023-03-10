@@ -145,14 +145,14 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
         /** DEPRECATED: this is the legacy trusted swap-in, which we keep for backwards-compatibility (previous payments inside the DB). */
         data class SwapIn(val address: String?) : Origin()
 
-        /** Trust-less swap-in based on dual funding. */
-        data class DualSwapIn(val localInputs: Set<OutPoint>) : Origin()
+        /** Trustless swap-in (dual-funding or splice-in) */
+        data class OnChain(val txid: ByteVector32, val localInputs: Set<OutPoint>) : Origin()
 
         fun matchesFilters(filters: Set<PaymentTypeFilter>): Boolean = when (this) {
             is Invoice -> filters.isEmpty() || filters.contains(PaymentTypeFilter.Normal)
             is KeySend -> filters.isEmpty() || filters.contains(PaymentTypeFilter.KeySend)
             is SwapIn -> filters.isEmpty() || filters.contains(PaymentTypeFilter.SwapIn)
-            is DualSwapIn -> filters.isEmpty() || filters.contains(PaymentTypeFilter.SwapIn)
+            is OnChain -> filters.isEmpty() || filters.contains(PaymentTypeFilter.SwapIn)
         }
     }
 
@@ -189,6 +189,17 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
          *                  but it is up to the implementor to listen to the correct channel event and update it when the channel is confirmed.
          */
         data class NewChannel(
+            val id: UUID,
+            override val amount: MilliSatoshi,
+            val serviceFee: MilliSatoshi,
+            val fundingFee: Satoshi = 0.sat,
+            val channelId: ByteVector32?,
+            val confirmed: Boolean = false
+        ) : ReceivedWith() {
+            override val fees: MilliSatoshi = serviceFee + fundingFee.toMilliSatoshi()
+        }
+
+        data class SpliceIn(
             val id: UUID,
             override val amount: MilliSatoshi,
             val serviceFee: MilliSatoshi,
@@ -388,7 +399,7 @@ data class LightningOutgoingPayment(
 data class SpliceOutgoingPayment(
     override val id: UUID,
     val amountSatoshi: Satoshi,
-    val scriptPubKey: ByteVector,
+    val address: String,
     val miningFees: Satoshi,
     override val createdAt: Long,
     val confirmedAt: Long? = null
