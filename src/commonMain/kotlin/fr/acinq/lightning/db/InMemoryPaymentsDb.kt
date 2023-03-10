@@ -55,24 +55,6 @@ class InMemoryPaymentsDb : PaymentsDb {
         }
     }
 
-    override suspend fun listReceivedPayments(count: Int, skip: Int, filters: Set<PaymentTypeFilter>): List<IncomingPayment> =
-        incoming.values
-            .asSequence()
-            .filter { it.received != null && it.origin.matchesFilters(filters) }
-            .sortedByDescending { it.completedAt() }
-            .drop(skip)
-            .take(count)
-            .toList()
-
-    override suspend fun listIncomingPayments(count: Int, skip: Int, filters: Set<PaymentTypeFilter>): List<IncomingPayment> =
-        incoming.values
-            .asSequence()
-            .filter { it.origin.matchesFilters(filters) }
-            .sortedByDescending { it.createdAt }
-            .drop(skip)
-            .take(count)
-            .toList()
-    
     override suspend fun listExpiredPayments(fromCreatedAt: Long, toCreatedAt: Long): List<IncomingPayment> =
         incoming.values
             .asSequence()
@@ -163,28 +145,10 @@ class InMemoryPaymentsDb : PaymentsDb {
         }
     }
 
-    override suspend fun listOutgoingPayments(paymentHash: ByteVector32): List<LightningOutgoingPayment> {
+    override suspend fun listLightningOutgoingPayments(paymentHash: ByteVector32): List<LightningOutgoingPayment> {
         return outgoing.values.filter { it.paymentHash == paymentHash }.map { payment ->
             val parts = outgoingParts.values.filter { it.first == payment.id }.map { it.second }
             payment.copy(parts = parts)
         }
-    }
-
-    override suspend fun listOutgoingPayments(count: Int, skip: Int, filters: Set<PaymentTypeFilter>): List<LightningOutgoingPayment> =
-        outgoing.values
-            .asSequence()
-            .filter { it.details.matchesFilters(filters) && (it.status is LightningOutgoingPayment.Status.Completed) }
-            .sortedByDescending { it.completedAt() }
-            .drop(skip)
-            .take(count)
-            .toList()
-
-    override suspend fun listPayments(count: Int, skip: Int, filters: Set<PaymentTypeFilter>): List<WalletPayment> {
-        val incoming: List<WalletPayment> = listReceivedPayments(count + skip, 0, filters)
-        val outgoing: List<WalletPayment> = listOutgoingPayments(count + skip, 0, filters)
-        return (incoming + outgoing)
-            .sortedByDescending { it.completedAt() }
-            .drop(skip)
-            .take(count)
     }
 }
