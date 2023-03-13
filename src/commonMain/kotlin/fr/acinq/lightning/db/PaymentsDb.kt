@@ -111,12 +111,18 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
 
     val paymentHash: ByteVector32 = Crypto.sha256(preimage).toByteVector32()
 
-    /** Returns the receivedAt timestamp if available. If any NewChannels parts have NOT yet confirmed, always returns null. */
-    override val completedAt: Long? = if (received?.receivedWith?.filterIsInstance<ReceivedWith.NewChannel>()?.any { !it.confirmed } == true) {
-        null
-    } else {
-        received?.receivedAt
-    }
+    /** Returns the confirmed reception timestamp. If any on-chain parts have NOT yet confirmed, returns null. */
+    override val completedAt: Long?
+        get() {
+            val anyNotConfirmed = received?.receivedWith?.any { part ->
+                when (part) {
+                    is ReceivedWith.NewChannel -> !part.confirmed
+                    is ReceivedWith.SpliceIn -> !part.confirmed
+                    else -> false
+                }
+            } ?: false
+            return if (anyNotConfirmed) null else received?.receivedAt
+        }
 
     /** Total fees paid to receive this payment. */
     override val fees: MilliSatoshi = received?.fees ?: 0.msat
