@@ -786,7 +786,7 @@ data class Commitments(
     fun ChannelContext.updateLocalFundingStatus(fundingTxId: ByteVector32, status: LocalFundingStatus): Either<Commitments, Pair<Commitments, Commitment>> =
         updateFundingStatus(fundingTxId) { c: Commitment, _: Long ->
             if (c.fundingTxId == fundingTxId) {
-                logger.info { "setting localFundingStatus=${status::class.simpleName} for funding fundingTxId=$fundingTxId" }
+                logger.debug { "setting localFundingStatus=${status::class.simpleName} for funding fundingTxId=$fundingTxId" }
                 c.copy(localFundingStatus = status)
             } else c
         }
@@ -795,7 +795,7 @@ data class Commitments(
         updateFundingStatus(fundingTxId) { c: Commitment, fundingTxIndex: Long ->
             // all funding older than this one are considered locked
             if (c.fundingTxId == fundingTxId || c.fundingTxIndex < fundingTxIndex) {
-                logger.info { "setting remoteFundingStatus=${RemoteFundingStatus.Locked::class.simpleName} for fundingTxId=$fundingTxId" }
+                logger.debug { "setting remoteFundingStatus=${RemoteFundingStatus.Locked::class.simpleName} for fundingTxId=$fundingTxId" }
                 c.copy(remoteFundingStatus = RemoteFundingStatus.Locked)
             } else c
         }

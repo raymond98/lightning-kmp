@@ -7,7 +7,7 @@ import fr.acinq.bitcoin.io.Input
 import fr.acinq.bitcoin.io.Output
 import fr.acinq.lightning.*
 import fr.acinq.lightning.blockchain.fee.FeeratePerKw
-import fr.acinq.lightning.channel.ChannelOrigin
+import fr.acinq.lightning.channel.Origin
 import fr.acinq.lightning.channel.ChannelType
 import fr.acinq.lightning.router.Announcements
 import fr.acinq.lightning.utils.*
@@ -626,7 +626,7 @@ data class OpenDualFundedChannel(
 ) : ChannelMessage, HasTemporaryChannelId, HasChainHash {
     val channelType: ChannelType? get() = tlvStream.get<ChannelTlv.ChannelTypeTlv>()?.channelType
     val pushAmount: MilliSatoshi get() = tlvStream.get<ChannelTlv.PushAmountTlv>()?.amount ?: 0.msat
-    val origin: ChannelOrigin? get() = tlvStream.get<ChannelTlv.ChannelOriginTlv>()?.channelOrigin
+    val origin: Origin? get() = tlvStream.get<ChannelTlv.OriginTlv>()?.channelOrigin
 
     override val type: Long get() = OpenDualFundedChannel.type
 
@@ -661,7 +661,7 @@ data class OpenDualFundedChannel(
             ChannelTlv.UpfrontShutdownScriptTlv.tag to ChannelTlv.UpfrontShutdownScriptTlv.Companion as TlvValueReader<ChannelTlv>,
             ChannelTlv.ChannelTypeTlv.tag to ChannelTlv.ChannelTypeTlv.Companion as TlvValueReader<ChannelTlv>,
             ChannelTlv.RequireConfirmedInputsTlv.tag to ChannelTlv.RequireConfirmedInputsTlv as TlvValueReader<ChannelTlv>,
-            ChannelTlv.ChannelOriginTlv.tag to ChannelTlv.ChannelOriginTlv.Companion as TlvValueReader<ChannelTlv>,
+            ChannelTlv.OriginTlv.tag to ChannelTlv.OriginTlv.Companion as TlvValueReader<ChannelTlv>,
             ChannelTlv.PushAmountTlv.tag to ChannelTlv.PushAmountTlv.Companion as TlvValueReader<ChannelTlv>,
         )
 
@@ -854,7 +854,7 @@ data class SpliceInit(
     override val type: Long get() = SpliceInit.type
     val requireConfirmedInputs: Boolean = tlvStream.get<ChannelTlv.RequireConfirmedInputsTlv>()?.let { true } ?: false
     val pushAmount: MilliSatoshi = tlvStream.get<ChannelTlv.PushAmountTlv>()?.amount ?: 0.msat
-    val channelOrigins: List<ChannelOrigin> = tlvStream.get<ChannelTlv.ChannelOriginsTlv>()?.channelOrigins ?: emptyList()
+    val channelOrigins: List<Origin> = tlvStream.get<ChannelTlv.OriginsTlv>()?.channelOrigins ?: emptyList()
 
     constructor(channelId: ByteVector32, fundingAmount: Satoshi, lockTime: Long, feerate: FeeratePerKw, pushAmount: MilliSatoshi) : this(
         channelId,
@@ -879,7 +879,7 @@ data class SpliceInit(
         private val readers = mapOf(
             ChannelTlv.RequireConfirmedInputsTlv.tag to ChannelTlv.RequireConfirmedInputsTlv as TlvValueReader<ChannelTlv>,
             ChannelTlv.PushAmountTlv.tag to ChannelTlv.PushAmountTlv.Companion as TlvValueReader<ChannelTlv>,
-            ChannelTlv.ChannelOriginsTlv.tag to ChannelTlv.ChannelOriginsTlv.Companion as TlvValueReader<ChannelTlv>
+            ChannelTlv.OriginsTlv.tag to ChannelTlv.OriginsTlv.Companion as TlvValueReader<ChannelTlv>
         )
 
         override fun read(input: Input): SpliceInit = SpliceInit(

@@ -11,8 +11,8 @@ import fr.acinq.lightning.crypto.KeyManager
 import fr.acinq.lightning.transactions.Scripts
 import fr.acinq.lightning.transactions.Transactions.TransactionWithInputInfo.*
 import fr.acinq.lightning.utils.LoggingContext
-import fr.acinq.lightning.wire.ClosingSigned
 import fr.acinq.lightning.utils.sat
+import fr.acinq.lightning.wire.ClosingSigned
 
 /**
  * Details about a force-close where we published our commitment.
@@ -418,11 +418,13 @@ object ChannelFlags {
 
 data class ClosingTxProposed(val unsignedTx: ClosingTx, val localClosingSigned: ClosingSigned)
 
-/** This gives the reason for creating a new channel. */
-sealed class ChannelOrigin {
+/** Reason for creating a new channel or a splice. */
+// @formatter:off
+sealed class Origin {
     abstract val amount: MilliSatoshi
     abstract val serviceFee: MilliSatoshi
     abstract val miningFee: Satoshi
-    data class PayToOpenOrigin(val paymentHash: ByteVector32, override val serviceFee: MilliSatoshi, override val amount: MilliSatoshi) : ChannelOrigin() { override val miningFee: Satoshi = 0.sat }
-    data class PleaseOpenChannelOrigin(val requestId: ByteVector32, override val serviceFee: MilliSatoshi, override val miningFee: Satoshi, override val amount: MilliSatoshi) : ChannelOrigin()
+    data class PayToOpenOrigin(val paymentHash: ByteVector32, override val serviceFee: MilliSatoshi, override val amount: MilliSatoshi) : Origin() { override val miningFee: Satoshi = 0.sat }
+    data class PleaseOpenChannelOrigin(val requestId: ByteVector32, override val serviceFee: MilliSatoshi, override val miningFee: Satoshi, override val amount: MilliSatoshi) : Origin()
 }
+// @formatter:on

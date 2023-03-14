@@ -39,7 +39,7 @@ data class WaitForFundingSigned(
     val channelFlags: Byte,
     val channelConfig: ChannelConfig,
     val channelFeatures: ChannelFeatures,
-    val channelOrigin: ChannelOrigin?
+    val channelOrigin: Origin?
 ) : ChannelState() {
     val channelId: ByteVector32 = fundingParams.channelId
 
@@ -87,7 +87,7 @@ data class WaitForFundingSigned(
                                     miningFee = channelOrigin?.miningFee ?: 0.sat,
                                     localInputs = fundingTx.localInputs.map { it.outPoint }.toSet(),
                                     txId = signedFundingTx.txId,
-                                    channelOrigin = channelOrigin
+                                    origin = channelOrigin
                                 )
                             )
                         }

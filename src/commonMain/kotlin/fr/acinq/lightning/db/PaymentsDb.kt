@@ -36,10 +36,6 @@ interface IncomingPaymentsDb {
     /** Simultaneously add and receive a payment. Use this method when receiving a spontaneous payment, for example a swap-in payment. */
     suspend fun addAndReceivePayment(preimage: ByteVector32, origin: IncomingPayment.Origin, receivedWith: Set<IncomingPayment.ReceivedWith>, createdAt: Long = currentTimestampMillis(), receivedAt: Long = currentTimestampMillis())
 
-    /** Update the channel id of the payments parts that have been received with a new channel, for a given payment hash. If there is no payments for this payment hash,
-     * or if the payment has not received any payment parts yet, then this method is a no-op. */
-    suspend fun updateNewChannelReceivedWithChannelId(paymentHash: ByteVector32, channelId: ByteVector32)
-
     /** List expired unpaid normal payments created within specified time range (with the most recent payments first). */
     suspend fun listExpiredPayments(fromCreatedAt: Long = 0, toCreatedAt: Long = currentTimestampMillis()): List<IncomingPayment>
 
@@ -110,7 +106,6 @@ sealed class WalletPayment {
  * @param createdAt absolute time in milliseconds since UNIX epoch when the payment request was generated.
  */
 data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val received: Received?, override val createdAt: Long = currentTimestampMillis()) : WalletPayment() {
-    constructor(preimage: ByteVector32, origin: Origin) : this(preimage, origin, null, currentTimestampMillis())
 
     val paymentHash: ByteVector32 = Crypto.sha256(preimage).toByteVector32()
 

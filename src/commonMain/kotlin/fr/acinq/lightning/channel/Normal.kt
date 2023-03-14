@@ -215,7 +215,8 @@ data class Normal(
                                                 serviceFee = 0.msat,
                                                 miningFee = spliceStatus.fundingTx.fees,
                                                 localInputs = spliceStatus.fundingTx.localInputs.map { it.outPoint }.toSet(),
-                                                txId = signedFundingTx.txId
+                                                txId = signedFundingTx.txId,
+                                                origin = null
                                             )
                                         )
                                         addAll(spliceStatus.fundingParams.localOutputs.map { txOut ->
@@ -665,7 +666,7 @@ data class Normal(
                 val spliceSession: InteractiveTxSession,
                 val localPushAmount: MilliSatoshi,
                 val remotePushAmount: MilliSatoshi,
-                val origins: List<ChannelOrigin>
+                val origins: List<Origin>
             ) : SpliceStatus()
 
             data class WaitForCommitSig(
@@ -673,7 +674,7 @@ data class Normal(
                 val fundingParams: InteractiveTxParams,
                 val fundingTx: SharedTransaction,
                 val commitTxs: Helpers.Funding.FirstCommitTxs,
-                val origins: List<ChannelOrigin>
+                val origins: List<Origin>
             ) : SpliceStatus()
 
             object Aborted : SpliceStatus()

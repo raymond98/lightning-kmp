@@ -49,7 +49,7 @@ object WaitForInit : ChannelState() {
                         buildList {
                             add(ChannelTlv.ChannelTypeTlv(cmd.channelType))
                             if (cmd.pushAmount > 0.msat) add(ChannelTlv.PushAmountTlv(cmd.pushAmount))
-                            if (cmd.channelOrigin != null) add(ChannelTlv.ChannelOriginTlv(cmd.channelOrigin))
+                            if (cmd.channelOrigin != null) add(ChannelTlv.OriginTlv(cmd.channelOrigin))
                         }
                     )
                 )
