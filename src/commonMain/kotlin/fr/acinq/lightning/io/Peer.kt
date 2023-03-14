@@ -541,6 +541,17 @@ class Peer(
                         )
                     }
 
+                    action is ChannelAction.Storage.SetConfirmationStatus -> {
+                        logger.info { "storing txid status $action" }
+                        db.payments.setConfirmationStatus(
+                            txId = action.txId,
+                            status = when(action.status) {
+                                ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.UNCONFIRMED -> PaymentsDb.ConfirmationStatus.UNCONFIRMED
+                                ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.CONFIRMED -> PaymentsDb.ConfirmationStatus.CONFIRMED
+                            }
+                        )
+                    }
+
                     action is ChannelAction.Storage.GetHtlcInfos -> {
                         val htlcInfos = db.channels.listHtlcInfos(actualChannelId, action.commitmentNumber).map { ChannelAction.Storage.HtlcInfo(actualChannelId, action.commitmentNumber, it.first, it.second) }
                         input.send(WrappedChannelCommand(actualChannelId, ChannelCommand.GetHtlcInfosResponse(action.revokedCommitTxId, htlcInfos)))

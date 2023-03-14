@@ -558,6 +558,7 @@ data class Normal(
                                                     add(ChannelAction.Message.Send(spliceLocked))
                                                 }
                                                 add(ChannelAction.Blockchain.PublishTx(fullySignedTx.signedTx))
+                                                add(ChannelAction.Storage.SetConfirmationStatus(fullySignedTx.txId, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.UNCONFIRMED))
                                                 add(ChannelAction.Storage.StoreState(nextState))
                                             }
                                             Pair(nextState, actions)

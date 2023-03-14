@@ -14,7 +14,6 @@ import fr.acinq.lightning.channel.Helpers.Closing.getRemotePerCommitmentSecret
 import fr.acinq.lightning.crypto.KeyManager
 import fr.acinq.lightning.db.LightningOutgoingPayment
 import fr.acinq.lightning.serialization.Encryption.from
-import fr.acinq.lightning.serialization.v2.MilliSatoshiSerializer
 import fr.acinq.lightning.transactions.Transactions.TransactionWithInputInfo.ClosingTx
 import fr.acinq.lightning.transactions.outgoings
 import fr.acinq.lightning.utils.*
@@ -27,6 +26,7 @@ import fr.acinq.lightning.wire.*
 
 /** Channel Events (inputs to be fed to the state machine). */
 sealed class ChannelCommand {
+    // @formatter:off
     data class InitInitiator(
         val fundingAmount: Satoshi,
         val pushAmount: MilliSatoshi,
@@ -61,11 +61,12 @@ sealed class ChannelCommand {
     data class GetHtlcInfosResponse(val revokedCommitTxId: ByteVector32, val htlcInfos: List<ChannelAction.Storage.HtlcInfo>) : ChannelCommand()
     object Disconnected : ChannelCommand()
     data class Connected(val localInit: Init, val remoteInit: Init) : ChannelCommand()
+    // @formatter:on
 }
 
 /** Channel Actions (outputs produced by the state machine). */
 sealed class ChannelAction {
-
+    // @formatter:off
     data class ProcessLocalError(val error: Throwable, val trigger: ChannelCommand) : ChannelAction()
 
     sealed class Message : ChannelAction() {
@@ -105,6 +106,7 @@ sealed class ChannelAction {
             data class ViaSpliceOut(override val amount: Satoshi, override val miningFees: Satoshi, override val address: String, override val txId: ByteVector32) : StoreOutgoingPayment()
             data class ViaClose(override val amount: Satoshi, override val miningFees: Satoshi, override val address: String, override val txId: ByteVector32) : StoreOutgoingPayment()
         }
+        data class SetConfirmationStatus(val txId: ByteVector32, val status: ConfirmationStatus) : Storage() { enum class ConfirmationStatus { UNCONFIRMED, CONFIRMED } }
         data class StoreChannelClosing(val amount: MilliSatoshi, val closingAddress: String, val isSentToDefaultAddress: Boolean) : Storage()
         data class StoreChannelClosed(val closingTxs: List<LightningOutgoingPayment.ClosingTxPart>) : Storage()
     }
@@ -145,6 +147,7 @@ sealed class ChannelAction {
     }
 
     data class EmitEvent(val event: ChannelEvents) : ChannelAction()
+    // @formatter:on
 }
 
 /** Channel static parameters. */
@@ -307,7 +310,11 @@ sealed class ChannelStateWithCommitments : ChannelState() {
         return commitments.run {
             updateLocalFundingStatus(w.tx.txid, fundingStatus).map { (commitments1, commitment) ->
                 val watchSpent = WatchSpent(channelId, commitment.fundingTxId, commitment.commitInput.outPoint.index.toInt(), commitment.commitInput.txOut.publicKeyScript, BITCOIN_FUNDING_SPENT)
-                Triple(commitments1, commitment, listOf(ChannelAction.Blockchain.SendWatch(watchSpent)))
+                val actions = listOf(
+                    ChannelAction.Blockchain.SendWatch(watchSpent),
+                    ChannelAction.Storage.SetConfirmationStatus(w.tx.txid, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.UNCONFIRMED),
+                )
+                Triple(commitments1, commitment, actions)
             }
         }
     }

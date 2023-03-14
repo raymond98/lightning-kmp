@@ -9,7 +9,10 @@ import fr.acinq.lightning.payment.PaymentRequest
 import fr.acinq.lightning.utils.*
 import fr.acinq.lightning.wire.FailureMessage
 
-interface PaymentsDb : IncomingPaymentsDb, OutgoingPaymentsDb
+interface PaymentsDb : IncomingPaymentsDb, OutgoingPaymentsDb {
+    enum class ConfirmationStatus { UNCONFIRMED, CONFIRMED }
+    suspend fun setConfirmationStatus(txId: ByteVector32, status: ConfirmationStatus)
+}
 
 interface IncomingPaymentsDb {
     /** Add a new expected incoming payment (not yet received). */

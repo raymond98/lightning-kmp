@@ -14,6 +14,9 @@ class InMemoryPaymentsDb : PaymentsDb {
     private val incoming = mutableMapOf<ByteVector32, IncomingPayment>()
     private val outgoing = mutableMapOf<UUID, LightningOutgoingPayment>()
     private val outgoingParts = mutableMapOf<UUID, Pair<UUID, LightningOutgoingPayment.Part>>()
+    override suspend fun setConfirmationStatus(txId: ByteVector32, status: PaymentsDb.ConfirmationStatus) {
+        TODO("Not yet implemented")
+    }
 
     override suspend fun addIncomingPayment(preimage: ByteVector32, origin: IncomingPayment.Origin, createdAt: Long) {
         val paymentHash = Crypto.sha256(preimage).toByteVector32()
