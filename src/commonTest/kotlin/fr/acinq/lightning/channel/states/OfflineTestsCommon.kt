@@ -319,7 +319,7 @@ class OfflineTestsCommon : LightningTestSuite() {
         assertIs<LNChannel<Closing>>(bob3)
         assertNotNull(bob3.state.localCommitPublished)
         val bobCommitTx = bob3.state.localCommitPublished!!.commitTx
-        actionsBob3.hasTx(bobCommitTx)
+        actionsBob3.hasPublishTx(bobCommitTx)
 
         // alice is able to claim her main output
         val (alice4, actionsAlice4) = alice3.process(ChannelCommand.WatchReceived(WatchEventSpent(aliceOld.channelId, BITCOIN_FUNDING_SPENT, bobCommitTx)))
@@ -328,7 +328,7 @@ class OfflineTestsCommon : LightningTestSuite() {
         assertEquals(bobCommitTx, alice4.state.futureRemoteCommitPublished!!.commitTx)
         assertNotNull(alice4.state.futureRemoteCommitPublished!!.claimMainOutputTx)
         assertTrue(alice4.state.futureRemoteCommitPublished!!.claimHtlcTxs.isEmpty())
-        actionsAlice4.hasTx(alice4.state.futureRemoteCommitPublished!!.claimMainOutputTx!!.tx)
+        actionsAlice4.hasPublishTx(alice4.state.futureRemoteCommitPublished!!.claimMainOutputTx!!.tx)
         Transaction.correctlySpends(alice4.state.futureRemoteCommitPublished!!.claimMainOutputTx!!.tx, bobCommitTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
     }
 
@@ -493,13 +493,13 @@ class OfflineTestsCommon : LightningTestSuite() {
         val (alice2, actionsAlice2) = LNChannel(alice1.ctx, WaitForInit).process(ChannelCommand.Restore(alice1.state))
         assertEquals(alice2.state, Offline(alice1.state))
         assertEquals(actionsAlice2.size, 2)
-        actionsAlice2.hasTx(fundingTx)
+        actionsAlice2.hasPublishTx(fundingTx)
         assertEquals(actionsAlice2.findWatch<WatchConfirmed>().txId, fundingTx.txid)
         // Bob restarts:
         val (bob2, actionsBob2) = LNChannel(bob1.ctx, WaitForInit).process(ChannelCommand.Restore(bob1.state))
         assertEquals(bob2.state, Offline(bob1.state))
         assertEquals(actionsBob2.size, 2)
-        actionsBob2.hasTx(fundingTx)
+        actionsBob2.hasPublishTx(fundingTx)
         assertEquals(actionsBob2.findWatch<WatchConfirmed>().txId, fundingTx.txid)
     }
 
@@ -515,8 +515,8 @@ class OfflineTestsCommon : LightningTestSuite() {
         val (alice2, actionsAlice2) = LNChannel(alice1.ctx, WaitForInit).process(ChannelCommand.Restore(alice1.state))
         assertEquals(alice2.state, Offline(alice1.state))
         assertEquals(actionsAlice2.size, 4)
-        actionsAlice2.hasTx(fundingTx1)
-        actionsAlice2.hasTx(fundingTx2)
+        actionsAlice2.hasPublishTx(fundingTx1)
+        actionsAlice2.hasPublishTx(fundingTx2)
         assertEquals(actionsAlice2.findWatches<WatchConfirmed>().map { it.txId }.toSet(), setOf(fundingTx1.txid, fundingTx2.txid))
         // Bob restarts:
         val (bob2, actionsBob2) = LNChannel(bob1.ctx, WaitForInit).process(ChannelCommand.Restore(bob1.state))
@@ -532,20 +532,25 @@ class OfflineTestsCommon : LightningTestSuite() {
         val (alice, bob, _) = WaitForFundingConfirmedTestsCommon.init(ChannelType.SupportedChannelType.AnchorOutputs, alicePushAmount = 0.msat)
         val fundingTx = alice.state.latestFundingTx.sharedTx.tx.buildUnsignedTx()
         val (alice1, bob1) = disconnect(alice, bob)
+        // outer state is Offline, we check the inner states
         assertIs<WaitForFundingConfirmed>(alice1.state.state)
         assertIs<WaitForFundingConfirmed>(bob1.state.state)
-        val (alice2, actionsAlice2) = alice1.process(ChannelCommand.WatchReceived(WatchEventConfirmed(alice.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, fundingTx)))
-        assertIs<LNChannel<Offline>>(alice2)
-        assertIs<WaitForChannelReady>(alice2.state.state)
-        assertEquals(actionsAlice2.size, 2)
-        assertEquals(actionsAlice2.hasWatch<WatchSpent>().txId, fundingTx.txid)
-        actionsAlice2.has<ChannelAction.Storage.StoreState>()
-        val (bob2, actionsBob2) = bob1.process(ChannelCommand.WatchReceived(WatchEventConfirmed(bob.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, fundingTx)))
-        assertIs<LNChannel<Offline>>(bob2)
-        assertIs<WaitForChannelReady>(bob2.state.state)
-        assertEquals(actionsBob2.size, 2)
-        assertEquals(actionsBob2.hasWatch<WatchSpent>().txId, fundingTx.txid)
-        actionsBob2.has<ChannelAction.Storage.StoreState>()
+        val (_, _) = alice1.process(ChannelCommand.WatchReceived(WatchEventConfirmed(alice.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, fundingTx)))
+            .also { (state, actions) ->
+                assertIs<LNChannel<Offline>>(state)
+                assertIs<WaitForChannelReady>(state.state.state)
+                actions.hasWatchFundingSpent(fundingTx.txid)
+                actions.has<ChannelAction.Storage.SetConfirmationStatus>()
+                actions.has<ChannelAction.Storage.StoreState>()
+            }
+        val (_, _) = bob1.process(ChannelCommand.WatchReceived(WatchEventConfirmed(bob.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, fundingTx)))
+            .also { (state, actions) ->
+                assertIs<LNChannel<Offline>>(state)
+                assertIs<WaitForChannelReady>(state.state.state)
+                actions.hasWatchFundingSpent(fundingTx.txid)
+                actions.has<ChannelAction.Storage.SetConfirmationStatus>()
+                actions.has<ChannelAction.Storage.StoreState>()
+            }
     }
 
     @Test
@@ -556,24 +561,22 @@ class OfflineTestsCommon : LightningTestSuite() {
         val (alice2, bob2) = disconnect(alice1, bob1)
         assertIs<WaitForFundingConfirmed>(alice2.state.state)
         assertIs<WaitForFundingConfirmed>(bob2.state.state)
-        val (alice3, actionsAlice3) = alice2.process(ChannelCommand.WatchReceived(WatchEventConfirmed(alice.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, previousFundingTx)))
-        assertIs<LNChannel<Offline>>(alice3)
-        val aliceState3 = alice3.state.state
-        assertIs<WaitForChannelReady>(aliceState3)
-        assertEquals(aliceState3.commitments.active.size, 1)
-        assertEquals(aliceState3.commitments.latest.fundingTxId, previousFundingTx.txid)
-        assertEquals(actionsAlice3.size, 2)
-        assertEquals(actionsAlice3.hasWatch<WatchSpent>().txId, previousFundingTx.txid)
-        actionsAlice3.has<ChannelAction.Storage.StoreState>()
-        val (bob3, actionsBob3) = bob2.process(ChannelCommand.WatchReceived(WatchEventConfirmed(bob.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, previousFundingTx)))
-        assertIs<LNChannel<Offline>>(bob3)
-        val bobState3 = bob3.state.state
-        assertIs<WaitForChannelReady>(bobState3)
-        assertEquals(bobState3.commitments.active.size, 1)
-        assertEquals(bobState3.commitments.latest.fundingTxId, previousFundingTx.txid)
-        assertEquals(actionsBob3.size, 2)
-        assertEquals(actionsBob3.hasWatch<WatchSpent>().txId, previousFundingTx.txid)
-        actionsBob3.has<ChannelAction.Storage.StoreState>()
+        val (_, _) = alice2.process(ChannelCommand.WatchReceived(WatchEventConfirmed(alice.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, previousFundingTx)))
+            .also { (state, actions) ->
+                assertIs<LNChannel<Offline>>(state)
+                assertIs<WaitForChannelReady>(state.state.state)
+                actions.hasWatchFundingSpent(previousFundingTx.txid)
+                actions.has<ChannelAction.Storage.SetConfirmationStatus>()
+                actions.has<ChannelAction.Storage.StoreState>()
+            }
+        val (_, _) = bob2.process(ChannelCommand.WatchReceived(WatchEventConfirmed(bob.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, previousFundingTx)))
+            .also { (state, actions) ->
+                assertIs<LNChannel<Offline>>(state)
+                assertIs<WaitForChannelReady>(state.state.state)
+                actions.hasWatchFundingSpent(previousFundingTx.txid)
+                actions.has<ChannelAction.Storage.SetConfirmationStatus>()
+                actions.has<ChannelAction.Storage.StoreState>()
+            }
     }
 
     @Test
@@ -609,10 +612,10 @@ class OfflineTestsCommon : LightningTestSuite() {
         actions.hasOutgoingMessage<Error>()
         actions.has<ChannelAction.Storage.StoreState>()
         val lcp = alice4.state.localCommitPublished!!
-        actions.hasTx(lcp.commitTx)
+        actions.hasPublishTx(lcp.commitTx)
         assertEquals(1, lcp.htlcTimeoutTxs().size)
         assertEquals(1, lcp.claimHtlcDelayedTxs.size)
-        assertEquals(4, actions.findTxs().size) // commit tx + main output + htlc-timeout + claim-htlc-delayed
+        assertEquals(4, actions.findPublishTxs().size) // commit tx + main output + htlc-timeout + claim-htlc-delayed
         assertEquals(3, actions.findWatches<WatchConfirmed>().size) // commit tx + main output + claim-htlc-delayed
         assertEquals(1, actions.findWatches<WatchSpent>().size) // htlc-timeout
     }
@@ -644,7 +647,7 @@ class OfflineTestsCommon : LightningTestSuite() {
         Transaction.correctlySpends(lcp.claimHtlcDelayedTxs.first().tx, lcp.htlcSuccessTxs().first().tx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
 
         val txs = setOf(lcp.commitTx, lcp.claimMainDelayedOutputTx!!.tx, lcp.htlcSuccessTxs().first().tx, lcp.claimHtlcDelayedTxs.first().tx)
-        assertEquals(txs, actions4.findTxs().toSet())
+        assertEquals(txs, actions4.findPublishTxs().toSet())
         val watchConfirmed = listOf(lcp.commitTx, lcp.claimMainDelayedOutputTx!!.tx, lcp.claimHtlcDelayedTxs.first().tx).map { it.txid }.toSet()
         assertEquals(watchConfirmed, actions4.findWatches<WatchConfirmed>().map { it.txId }.toSet())
         val watchSpent = setOf(lcp.htlcSuccessTxs().first().input.outPoint)
@@ -659,7 +662,7 @@ class OfflineTestsCommon : LightningTestSuite() {
         val commitTx = alice1.state.state.commitments.latest.localCommit.publishableTxs.commitTx.tx
         val (alice2, actions2) = alice1.process(ChannelCommand.ExecuteCommand(CMD_FORCECLOSE))
         assertIs<LNChannel<Closing>>(alice2)
-        actions2.hasTx(commitTx)
+        actions2.hasPublishTx(commitTx)
         assertNull(actions2.findOutgoingMessageOpt<Error>()) // we're offline so we shouldn't try to send messages
     }
 
@@ -684,7 +687,7 @@ class OfflineTestsCommon : LightningTestSuite() {
         assertNotNull(remoteCommitPublished)
         val claimMainOutputTx = remoteCommitPublished.claimMainOutputTx
         assertNotNull(claimMainOutputTx)
-        actions.hasTx(claimMainOutputTx.tx)
+        actions.hasPublishTx(claimMainOutputTx.tx)
         val watches = actions.findWatches<WatchConfirmed>()
         assertEquals(2, watches.size)
         assertNotNull(watches.first { it.txId == remoteCommitPublished.commitTx.txid })

@@ -64,14 +64,9 @@ data class Closing(
                 when {
                     watch is WatchEventConfirmed && watch.event is BITCOIN_FUNDING_DEPTHOK -> {
                         when (val res = acceptFundingTxConfirmed(watch)) {
-                            is Either.Left -> Pair(this@Closing, listOf())
                             is Either.Right -> {
-                                val (commitments1, _, actions) = res.value
-                                if (commitments.latest.fundingTxId == watch.tx.txid) {
-                                    // The best funding tx candidate has been confirmed, we can forget alternative commitments.
-                                    val nextState = this@Closing.copy(commitments = commitments1)
-                                    Pair(nextState, actions + listOf(ChannelAction.Storage.StoreState(nextState)))
-                                } else {
+                                val (commitments1, commitment, actions) = res.value
+                                if (commitments.latest.fundingTxIndex == commitment.fundingTxIndex && commitments.latest.fundingTxId != commitment.fundingTxId) {
                                     // This is a corner case where:
                                     //  - the funding tx was RBF-ed
                                     //  - *and* we went to CLOSING before any funding tx got confirmed (probably due to a local or remote error)
@@ -83,11 +78,22 @@ data class Closing(
                                     //
                                     // Force-closing is our only option here, if we are in this state the channel was closing and it is too late
                                     // to negotiate a mutual close.
+                                    // The best funding tx candidate has been confirmed, we can forget alternative commitments.
                                     logger.info { "channel was confirmed at blockHeight=${watch.blockHeight} txIndex=${watch.txIndex} with a previous funding txid=${watch.tx.txid}" }
-                                    val (nextState, actions1) = this@Closing.copy(commitments = commitments1).run { spendLocalCurrent() }
+                                    val commitments2 = commitments1.copy(
+                                        active = listOf(commitment),
+                                        inactive = emptyList()
+                                    )
+                                    val (nextState, actions1) = this@Closing.copy(commitments = commitments2).run { spendLocalCurrent() }
                                     Pair(nextState, actions + actions1)
+                                } else {
+                                    // We're still on the same splice history, nothing to do
+                                    val nextState = this@Closing.copy(commitments = commitments1)
+                                    Pair(nextState, actions + listOf(ChannelAction.Storage.StoreState(nextState)))
+
                                 }
                             }
+                            is Either.Left -> Pair(this@Closing, listOf())
                         }
                     }
                     watch is WatchEventSpent && watch.event is BITCOIN_FUNDING_SPENT -> when {
