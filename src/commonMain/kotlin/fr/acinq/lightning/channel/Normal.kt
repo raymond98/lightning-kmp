@@ -196,7 +196,7 @@ data class Normal(
                                 is Helpers.Funding.FirstCommitment -> {
                                     val (signedFundingTx, commitment) = firstCommitmentRes
                                     logger.info { "splice funding tx created with txId=${commitment.fundingTxId}. ${signedFundingTx.tx.localInputs.size} local inputs, ${signedFundingTx.tx.remoteInputs.size} remote inputs, ${signedFundingTx.tx.localOutputs.size} local outputs and ${signedFundingTx.tx.remoteOutputs.size} remote outputs" }
-                                    // It's a bit early to claim success because we have not yet received their signatures
+                                    // It's a bit early to claim success because we have not yet received their signatures, but after this cleanup the splice status and lose the reference to replyTo
                                     spliceStatus.replyTo?.complete(Command.Splice.Response.Success(channelId, commitment.fundingTxIndex, commitment.fundingTxId, commitment.fundingAmount, commitment.localCommit.spec.toLocal))
                                     // We watch for confirmation in all cases, to allow pruning outdated commitments when transactions confirm.
                                     val fundingMinDepth = Helpers.minDepthForFunding(staticParams.nodeParams, spliceStatus.fundingParams.fundingAmount)

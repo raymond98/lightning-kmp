@@ -34,6 +34,7 @@ internal inline fun <reified T : Watch> List<ChannelAction>.findWatches(): List<
 internal inline fun <reified T : Watch> List<ChannelAction>.findWatch(): T = findWatches<T>().firstOrNull() ?: fail("cannot find watch ${T::class}")
 internal inline fun <reified T : Watch> List<ChannelAction>.hasWatch() = assertNotNull(findWatches<T>().firstOrNull(), "cannot find watch ${T::class}")
 internal fun List<ChannelAction>.hasWatchFundingSpent(txId: ByteVector32): WatchSpent = hasWatch<WatchSpent>().also { assertEquals(txId, it.txId); assertEquals(BITCOIN_FUNDING_SPENT, it.event) }
+internal fun List<ChannelAction>.hasWatchConfirmed(txId: ByteVector32): WatchConfirmed = assertNotNull(findWatches<WatchConfirmed>().firstOrNull { it.txId == txId })
 
 // Commands
 internal inline fun <reified T : Command> List<ChannelAction>.findCommands(): List<T> = filterIsInstance<ChannelAction.Message.SendToSelf>().map { it.command }.filterIsInstance<T>()
@@ -44,6 +45,7 @@ internal inline fun <reified T : Command> List<ChannelAction>.hasCommand() = ass
 // Transactions
 internal fun List<ChannelAction>.findPublishTxs(): List<Transaction> = filterIsInstance<ChannelAction.Blockchain.PublishTx>().map { it.tx }
 internal fun List<ChannelAction>.hasPublishTx(tx: Transaction) = assertContains(findPublishTxs(), tx)
+internal fun List<ChannelAction>.hasPublishTx(txType: ChannelAction.Blockchain.PublishTx.Type): Transaction = assertNotNull(filterIsInstance<ChannelAction.Blockchain.PublishTx>().firstOrNull { it.txType == txType }).tx
 
 // Errors
 internal inline fun <reified T : Throwable> List<ChannelAction>.findErrorOpt(): T? = filterIsInstance<ChannelAction.ProcessLocalError>().map { it.error }.filterIsInstance<T>().firstOrNull()

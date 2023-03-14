@@ -97,7 +97,7 @@ data class Closing(
                         }
                     }
                     watch is WatchEventSpent && watch.event is BITCOIN_FUNDING_SPENT -> when {
-                        commitments.active.any { it.fundingTxId == watch.tx.txid } -> {
+                        commitments.all.any { it.fundingTxId == watch.tx.txid } -> {
                             // if the spending tx is itself a funding tx, this is a splice and there is nothing to do
                             Pair(this@Closing, listOf())
                         }
@@ -128,9 +128,46 @@ data class Closing(
                             // counterparty may attempt to spend a revoked commit tx at any time
                             handleRemoteSpentOther(watch.tx)
                         }
+                        else -> when (val commitment = commitments.resolveCommitment(watch.tx)) {
+                            is Commitment -> {
+                                logger.warning { "a commit tx for an older commitment has been published txid=${commitment.fundingTxId} fundingTxIndex=${commitment.fundingTxIndex}" }
+                                Pair(this@Closing, listOf(ChannelAction.Blockchain.SendWatch(WatchConfirmed(channelId, watch.tx, staticParams.nodeParams.minDepthBlocks.toLong(), BITCOIN_ALTERNATIVE_COMMIT_TX_CONFIRMED))))
+                            }
+                            else -> {
+                                logger.warning { "unrecognized tx=${watch.tx.txid}" }
+                                Pair(this@Closing, listOf())
+                            }
+                        }
+                    }
+                    watch is WatchEventConfirmed && watch.event is BITCOIN_ALTERNATIVE_COMMIT_TX_CONFIRMED -> when (val commitment = commitments.resolveCommitment(watch.tx)) {
+                        is Commitment -> {
+                            logger.warning { "a commit tx for fundingTxIndex=${commitment.fundingTxIndex} fundingTxid=${commitment.fundingTxIndex} has been confirmed" }
+                            val commitments1 = commitments.copy(
+                                active = listOf(commitment),
+                                inactive = emptyList()
+                            )
+                            val newState = this@Closing.copy(commitments = commitments1)
+                            when {
+                                watch.tx.txid == commitments1.latest.localCommit.publishableTxs.commitTx.tx.txid -> {
+                                    // our local commit has been published from the outside, it's unexpected but let's deal with it anyway
+                                    newState.run { spendLocalCurrent() }
+                                }
+                                watch.tx.txid == commitments1.latest.remoteCommit.txid && commitments1.remoteCommitIndex == commitments.remoteCommitIndex -> {
+                                    // counterparty may attempt to spend its last commit tx at any time
+                                    newState.run { handleRemoteSpentCurrent(watch.tx, commitments1.latest) }
+                                }
+                                watch.tx.txid == commitments1.latest.nextRemoteCommit?.commit?.txid && commitments1.remoteCommitIndex == commitments.remoteCommitIndex && commitments.remoteNextCommitInfo.isLeft -> {
+                                    // counterparty may attempt to spend its next commit tx at any time
+                                    newState.run { handleRemoteSpentNext(watch.tx, commitments1.latest) }
+                                }
+                                else -> {
+                                    // counterparty may attempt to spend a revoked commit tx at any time
+                                    newState.run { handleRemoteSpentOther(watch.tx) }
+                                }
+                            }
+                        }
                         else -> {
-                            logger.warning { "unrecognized tx=${watch.tx.txid}" }
-                            // this was for another commitments
+                            logger.warning { "unrecognized alternative commit tx=${watch.tx.txid}" }
                             Pair(this@Closing, listOf())
                         }
                     }

@@ -104,10 +104,10 @@ data class LocalCommitPublished(
 
     internal fun LoggingContext.doPublish(channelId: ByteVector32, minDepth: Long): List<ChannelAction> {
         val publishQueue = buildList {
-            add(commitTx)
-            claimMainDelayedOutputTx?.let { add(it.tx) }
-            addAll(htlcTxs.values.mapNotNull { it?.tx })
-            addAll(claimHtlcDelayedTxs.map { it.tx })
+            add(ChannelAction.Blockchain.PublishTx(commitTx, ChannelAction.Blockchain.PublishTx.Type.CommitTx))
+            claimMainDelayedOutputTx?.let { add(ChannelAction.Blockchain.PublishTx(it)) }
+            addAll(htlcTxs.values.filterNotNull().map { ChannelAction.Blockchain.PublishTx(it) })
+            addAll(claimHtlcDelayedTxs.map { ChannelAction.Blockchain.PublishTx(it) })
         }
         val publishList = publishIfNeeded(publishQueue, irrevocablySpent)
 
@@ -211,8 +211,8 @@ data class RemoteCommitPublished(
 
     internal fun LoggingContext.doPublish(channelId: ByteVector32, minDepth: Long): List<ChannelAction> {
         val publishQueue = buildList {
-            claimMainOutputTx?.let { add(it.tx) }
-            addAll(claimHtlcTxs.values.mapNotNull { it?.tx })
+            claimMainOutputTx?.let { add(ChannelAction.Blockchain.PublishTx(it)) }
+            addAll(claimHtlcTxs.values.filterNotNull().map { ChannelAction.Blockchain.PublishTx(it) })
         }
         val publishList = publishIfNeeded(publishQueue, irrevocablySpent)
 
@@ -311,10 +311,10 @@ data class RevokedCommitPublished(
 
     internal fun LoggingContext.doPublish(channelId: ByteVector32, minDepth: Long): List<ChannelAction> {
         val publishQueue = buildList {
-            claimMainOutputTx?.let { add(it.tx) }
-            mainPenaltyTx?.let { add(it.tx) }
-            addAll(htlcPenaltyTxs.map { it.tx })
-            addAll(claimHtlcDelayedPenaltyTxs.map { it.tx })
+            claimMainOutputTx?.let { add(ChannelAction.Blockchain.PublishTx(it)) }
+            mainPenaltyTx?.let { add(ChannelAction.Blockchain.PublishTx(it)) }
+            addAll(htlcPenaltyTxs.map { ChannelAction.Blockchain.PublishTx(it) })
+            addAll(claimHtlcDelayedPenaltyTxs.map { ChannelAction.Blockchain.PublishTx(it) })
         }
         val publishList = publishIfNeeded(publishQueue, irrevocablySpent)
 

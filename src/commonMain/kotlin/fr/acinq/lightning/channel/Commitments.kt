@@ -840,6 +840,15 @@ data class Commitments(
         }
     }
 
+    /**
+     * Find the corresponding commitment, based on a spending transaction.
+     *
+     * @param spendingTx A transaction that may spend a current or former funding tx
+     */
+    fun resolveCommitment(spendingTx: Transaction): Commitment? {
+        return all.find { commitment -> spendingTx.txIn.map { it.outPoint.txid }.contains(commitment.fundingTxId) }
+    }
+
     companion object {
 
         val ANCHOR_AMOUNT = 330.sat

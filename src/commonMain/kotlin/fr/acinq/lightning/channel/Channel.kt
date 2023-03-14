@@ -14,6 +14,7 @@ import fr.acinq.lightning.channel.Helpers.Closing.getRemotePerCommitmentSecret
 import fr.acinq.lightning.crypto.KeyManager
 import fr.acinq.lightning.db.LightningOutgoingPayment
 import fr.acinq.lightning.serialization.Encryption.from
+import fr.acinq.lightning.transactions.Transactions
 import fr.acinq.lightning.transactions.Transactions.TransactionWithInputInfo.ClosingTx
 import fr.acinq.lightning.transactions.outgoings
 import fr.acinq.lightning.utils.*
@@ -80,7 +81,48 @@ sealed class ChannelAction {
 
     sealed class Blockchain : ChannelAction() {
         data class SendWatch(val watch: Watch) : Blockchain()
-        data class PublishTx(val tx: Transaction) : Blockchain()
+        data class PublishTx(val tx: Transaction, val txType: Type = Type.Unspecified) : Blockchain() {
+            // region txType
+            enum class Type {
+                Unspecified,
+                CommitTx,
+                HtlcSuccessTx,
+                HtlcTimeoutTx,
+                ClaimHtlcSuccessTx,
+                ClaimHtlcTimeoutTx,
+                ClaimLocalAnchorOutputTx,
+                ClaimRemoteAnchorOutputTx,
+                ClaimLocalDelayedOutputTx,
+                ClaimP2WPKHOutputTx,
+                ClaimRemoteDelayedOutputTx,
+                MainPenaltyTx,
+                HtlcPenaltyTx,
+                ClaimHtlcDelayedOutputPenaltyTx,
+                ClosingTx,
+                SpliceTx,
+            }
+            constructor(txinfo: Transactions.TransactionWithInputInfo) : this(
+                tx = txinfo.tx,
+                txType = when(txinfo) {
+                    is Transactions.TransactionWithInputInfo.CommitTx -> Type.CommitTx
+                    is Transactions.TransactionWithInputInfo.HtlcTx.HtlcSuccessTx -> Type.HtlcSuccessTx
+                    is Transactions.TransactionWithInputInfo.HtlcTx.HtlcTimeoutTx -> Type.HtlcTimeoutTx
+                    is Transactions.TransactionWithInputInfo.ClaimHtlcTx.ClaimHtlcSuccessTx -> Type.ClaimHtlcSuccessTx
+                    is Transactions.TransactionWithInputInfo.ClaimHtlcTx.ClaimHtlcTimeoutTx -> Type.ClaimHtlcTimeoutTx
+                    is Transactions.TransactionWithInputInfo.ClaimAnchorOutputTx.ClaimLocalAnchorOutputTx -> Type.ClaimLocalAnchorOutputTx
+                    is Transactions.TransactionWithInputInfo.ClaimAnchorOutputTx.ClaimRemoteAnchorOutputTx -> Type.ClaimRemoteAnchorOutputTx
+                    is Transactions.TransactionWithInputInfo.ClaimLocalDelayedOutputTx -> Type.ClaimLocalDelayedOutputTx
+                    is Transactions.TransactionWithInputInfo.ClaimRemoteCommitMainOutputTx.ClaimP2WPKHOutputTx -> Type.ClaimP2WPKHOutputTx
+                    is Transactions.TransactionWithInputInfo.ClaimRemoteCommitMainOutputTx.ClaimRemoteDelayedOutputTx -> Type.ClaimRemoteDelayedOutputTx
+                    is Transactions.TransactionWithInputInfo.MainPenaltyTx -> Type.MainPenaltyTx
+                    is Transactions.TransactionWithInputInfo.HtlcPenaltyTx -> Type.HtlcPenaltyTx
+                    is Transactions.TransactionWithInputInfo.ClaimHtlcDelayedOutputPenaltyTx -> Type.ClaimHtlcDelayedOutputPenaltyTx
+                    is Transactions.TransactionWithInputInfo.ClosingTx -> Type.ClosingTx
+                    is Transactions.TransactionWithInputInfo.SpliceTx -> Type.SpliceTx
+                }
+            )
+            // endregion
+        }
     }
 
     sealed class Storage : ChannelAction() {
@@ -320,15 +362,20 @@ sealed class ChannelStateWithCommitments : ChannelState() {
      */
     internal fun ChannelContext.handlePotentialForceClose(w: WatchEventSpent): Pair<ChannelStateWithCommitments, List<ChannelAction>> = when {
         w.event != BITCOIN_FUNDING_SPENT -> Pair(this@ChannelStateWithCommitments, listOf())
-        commitments.active.any { it.fundingTxId == w.tx.txid } -> Pair(this@ChannelStateWithCommitments, listOf())
+        commitments.all.any { it.fundingTxId == w.tx.txid } -> Pair(this@ChannelStateWithCommitments, listOf()) // if the spending tx is itself a funding tx, this is a splice and there is nothing to do
         w.tx.txid == commitments.latest.localCommit.publishableTxs.commitTx.tx.txid -> spendLocalCurrent()
         w.tx.txid == commitments.latest.remoteCommit.txid -> handleRemoteSpentCurrent(w.tx, commitments.latest)
         w.tx.txid == commitments.latest.nextRemoteCommit?.commit?.txid -> handleRemoteSpentNext(w.tx, commitments.latest)
         w.tx.txIn.any { it.outPoint.txid == commitments.latest.fundingTxId } -> handleRemoteSpentOther(w.tx)
-        else -> {
-            logger.warning { "unrecognized tx=${w.tx.txid}" }
-            // this was for another commitments
-            Pair(this@ChannelStateWithCommitments, listOf())
+        else -> when (val commitment = commitments.resolveCommitment(w.tx)) {
+            is Commitment -> {
+                logger.warning { "a commit tx for an older commitment has been published txid=${commitment.fundingTxId} fundingTxIndex=${commitment.fundingTxIndex}" }
+                spendLocalCurrent().run { copy(second = second + ChannelAction.Blockchain.SendWatch(WatchConfirmed(channelId, w.tx, staticParams.nodeParams.minDepthBlocks.toLong(), BITCOIN_ALTERNATIVE_COMMIT_TX_CONFIRMED))) }
+            }
+            else -> {
+                logger.warning { "unrecognized tx=${w.tx.txid}" }
+                Pair(this@ChannelStateWithCommitments, listOf())
+            }
         }
     }
 
