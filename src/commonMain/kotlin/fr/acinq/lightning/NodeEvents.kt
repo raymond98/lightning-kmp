@@ -7,6 +7,7 @@ import fr.acinq.lightning.channel.Normal
 import fr.acinq.lightning.channel.WaitForFundingCreated
 import fr.acinq.lightning.wire.PleaseOpenChannel
 import fr.acinq.lightning.wire.PleaseOpenChannelFailure
+import kotlinx.coroutines.CompletableDeferred
 
 sealed interface NodeEvents
 
@@ -20,4 +21,15 @@ sealed interface ChannelEvents : NodeEvents {
     data class Creating(val state: WaitForFundingCreated) : ChannelEvents
     data class Created(val state: ChannelStateWithCommitments) : ChannelEvents
     data class Confirmed(val state: Normal) : ChannelEvents
+}
+
+sealed interface PayToOpenEvents : NodeEvents {
+    data class Rejected(val amount: MilliSatoshi, val fee: MilliSatoshi, val reason: Reason) : PayToOpenEvents {
+        sealed class Reason {
+            object PolicySetToDisabled : Reason()
+            object RejectedByUser : Reason()
+            data class TooExpensive(val maxFeeBasisPoints: Int, val maxFeeFloor: Satoshi) : Reason()
+        }
+    }
+    data class ApprovalRequested(val amount: MilliSatoshi, val fee: MilliSatoshi, val replyTo: CompletableDeferred<Boolean>) : PayToOpenEvents
 }

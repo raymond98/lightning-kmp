@@ -253,89 +253,100 @@ class ElectrumClient(
     }
 
     fun connect(serverAddress: ServerAddress) {
-        if (_connectionState.value is Connection.CLOSED) establishConnection(serverAddress)
+        if (_connectionState.value is Connection.CLOSED) establishConnection(serverAddress).invokeOnCompletion {  }
         else logger.warning { "electrum client is already running" }
     }
 
     fun disconnect() {
-        if (this::socket.isInitialized) socket.close()
+        if (this::connection.isInitialized) connection.complete(Unit)
         _connectionState.value = Connection.CLOSED(null)
         output.close()
     }
+
+    lateinit var connection: CompletableDeferred<Unit>
 
     // Warning : lateinit vars have to be used AFTER their init to avoid any crashes
     //
     // This shouldn't be used outside the establishedConnection() function
     // Except from the disconnect() one that check if the lateinit var has been initialized
-    private lateinit var socket: TcpSocket
-    private fun establishConnection(serverAddress: ServerAddress) = launch {
-        _connectionState.value = Connection.ESTABLISHING
-        socket = try {
-            val (host, port, tls) = serverAddress
-            logger.info { "attempting connection to electrumx instance [host=$host, port=$port, tls=$tls]" }
-            socketBuilder?.connect(host, port, tls, loggerFactory) ?: error("socket builder is null.")
-        } catch (ex: Throwable) {
-            logger.warning { "TCP connect: ${ex.message}" }
-            val ioException = when (ex) {
-                is TcpSocket.IOException -> ex
-                else -> TcpSocket.IOException.ConnectionRefused(ex)
-            }
-            _connectionState.value = Connection.CLOSED(ioException)
-            return@launch
-        }
-
-        logger.info { "connected to electrumx instance" }
-        mailbox.send(Connected)
-
-        fun closeSocket(ex: TcpSocket.IOException?) {
-            if (_connectionState.value is Connection.CLOSED) return
-            logger.warning { "closing TCP socket." }
-            socket.close()
-            _connectionState.value = Connection.CLOSED(ex)
-            cancel()
-        }
-
-        suspend fun send(message: ByteArray) {
-            try {
-                socket.send(message)
-            } catch (ex: TcpSocket.IOException) {
-                logger.warning { "TCP send: ${ex.message}" }
-                closeSocket(ex)
-            }
-        }
-
-        suspend fun ping() {
-            while (isActive) {
-                delay(30.seconds)
-                send(Ping.asJsonRPCRequest(-1).encodeToByteArray())
-            }
-        }
-
-        suspend fun respond() {
-            // Reset the output channel to avoid sending obsolete messages
-            output = Channel(BUFFERED)
-            for (msg in output) {
-                send(msg)
-            }
-        }
-
-        suspend fun listen() {
-            try {
-                socket.linesFlow().collect {
-                    val electrumResponse = json.decodeFromString(ElectrumResponseDeserializer, it)
-                    mailbox.send(ReceivedElectrumResponse(electrumResponse))
+    //
+    private fun establishConnection(serverAddress: ServerAddress): CompletableDeferred<Unit> {
+        val stop = CompletableDeferred<Unit>()
+        launch {
+            _connectionState.value = Connection.ESTABLISHING
+            val socket = try {
+                val (host, port, tls) = serverAddress
+                logger.info { "attempting connection to electrumx instance [host=$host, port=$port, tls=$tls]" }
+                socketBuilder?.connect(host, port, tls, loggerFactory) ?: error("socket builder is null.")
+            } catch (ex: Throwable) {
+                logger.warning { "TCP connect: ${ex.message}" }
+                val ioException = when (ex) {
+                    is TcpSocket.IOException -> ex
+                    else -> TcpSocket.IOException.ConnectionRefused(ex)
                 }
-                closeSocket(null)
-            } catch (ex: TcpSocket.IOException) {
-                logger.warning { "TCP receive: ${ex.message}" }
-                closeSocket(ex)
+                _connectionState.value = Connection.CLOSED(ioException)
+                return@launch
             }
+
+            logger.info { "connected to electrumx instance" }
+            mailbox.send(Connected)
+
+            fun closeSocket(ex: TcpSocket.IOException?) {
+                if (_connectionState.value is Connection.CLOSED) return
+                logger.warning { "closing TCP socket." }
+                socket.close()
+                _connectionState.value = Connection.CLOSED(ex)
+                cancel()
+            }
+
+            suspend fun send(message: ByteArray) {
+                try {
+                    socket.send(message)
+                } catch (ex: TcpSocket.IOException) {
+                    logger.warning { "TCP send: ${ex.message}" }
+                    closeSocket(ex)
+                }
+            }
+
+            suspend fun ping() {
+                while (isActive) {
+                    delay(30.seconds)
+                    send(Ping.asJsonRPCRequest(-1).encodeToByteArray())
+                }
+            }
+
+            suspend fun respond() {
+                // Reset the output channel to avoid sending obsolete messages
+                output = Channel(BUFFERED)
+                for (msg in output) {
+                    send(msg)
+                }
+            }
+
+            suspend fun listen() {
+                try {
+                    socket.linesFlow().collect {
+                        val electrumResponse = json.decodeFromString(ElectrumResponseDeserializer, it)
+                        mailbox.send(ReceivedElectrumResponse(electrumResponse))
+                    }
+                    closeSocket(null)
+                } catch (ex: TcpSocket.IOException) {
+                    logger.warning { "TCP receive: ${ex.message}" }
+                    closeSocket(ex)
+                }
+            }
+
+            launch { ping() }
+            launch { respond() }
+            launch {
+                stop.await()
+                closeSocket(null)
+            }
+
+            listen() // This suspends until the coroutines is cancelled or the socket is closed
+
         }
-
-        launch { ping() }
-        launch { respond() }
-
-        listen() // This suspends until the coroutines is cancelled or the socket is closed
+        return stop
     }
 
     /**
