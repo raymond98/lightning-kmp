@@ -12,6 +12,7 @@ import fr.acinq.lightning.WalletParams
 import fr.acinq.lightning.channel.*
 import fr.acinq.lightning.db.IncomingPayment
 import fr.acinq.lightning.db.IncomingPaymentsDb
+import fr.acinq.lightning.db.PaymentsDb
 import fr.acinq.lightning.io.PayToOpenResponseCommand
 import fr.acinq.lightning.io.PeerCommand
 import fr.acinq.lightning.io.WrappedChannelCommand
@@ -116,7 +117,8 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                         amount = action.amount,
                         serviceFee = action.serviceFee,
                         fundingFee = action.miningFee,
-                        channelId = channelId
+                        channelId = channelId,
+                        status = PaymentsDb.ConfirmationStatus.DRAFT
                     )
                 )
                 when (action.origin) {
@@ -141,7 +143,8 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                         amount = action.amount,
                         serviceFee = action.serviceFee,
                         fundingFee = action.miningFee,
-                        channelId = channelId
+                        channelId = channelId,
+                        status = PaymentsDb.ConfirmationStatus.DRAFT
                     )
                 )
                 when (action.origin) {
@@ -285,6 +288,11 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                                 null -> logger.info { "payment received (${payment.amountReceived}) without payment metadata" }
                                 else -> logger.info { "payment received (${payment.amountReceived}) with payment metadata ($paymentMetadata)" }
                             }
+                            // In the code below, we indicate the receivedWith only for htlc parts, because the pay-to-open parts
+                            // will be created later, via a new channel or a splice-in.
+                            // In the corner case where the payment is a mix of htlc and pay-to-open parts, then the payment will be considered
+                            // "received" in the db, but the sum of all parts will not reach the correct amount, until the pay-to-open parts are
+                            // added
                             val (actions, receivedWith) = payment.parts.map { part ->
                                 when (part) {
                                     is HtlcPart -> {
@@ -305,19 +313,14 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                                             paymentHash = paymentPart.paymentHash,
                                             result = PayToOpenResponse.Result.Success(incomingPayment.preimage)
                                         )
-                                    ) to IncomingPayment.ReceivedWith.NewChannel(
-                                        // The part's amount is the full amount, including the fee. The fee must be subtracted.
-                                        id = UUID.randomUUID(),
-                                        amount = part.amount - part.payToOpenRequest.payToOpenFeeSatoshis.toMilliSatoshi(),
-                                        serviceFee = part.payToOpenRequest.payToOpenFeeSatoshis.toMilliSatoshi(),
-                                        // At that point we do not know the channel's id. It will be set later on.
-                                        channelId = null
-                                    )
+                                    ) to null
                                 }
                             }.unzip()
                             pending.remove(paymentPart.paymentHash)
 
-                            val received = IncomingPayment.Received(receivedWith = receivedWith.toSet())
+                            val received = IncomingPayment.Received(receivedWith = receivedWith.filterNotNull().toSet())
+
+                            db.receivePayment(paymentPart.paymentHash, received.receivedWith)
 
                             return ProcessAddResult.Accepted(actions, incomingPayment.copy(received = received), received)
                         }

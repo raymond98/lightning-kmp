@@ -73,7 +73,8 @@ sealed class ChannelTlv : Tlv {
                 is Origin.PayToOpenOrigin -> {
                     LightningCodecs.writeU16(1, out)
                     LightningCodecs.writeBytes(channelOrigin.paymentHash, out)
-                    LightningCodecs.writeU64(channelOrigin.serviceFee.toLong(), out)
+                    LightningCodecs.writeU64(channelOrigin.serviceFee.truncateToSatoshi().toLong(), out) // msat->sat for backward compat
+                    LightningCodecs.writeU64(channelOrigin.amount.toLong(), out)
                 }
 
                 is Origin.PleaseOpenChannelOrigin -> {
@@ -81,6 +82,7 @@ sealed class ChannelTlv : Tlv {
                     LightningCodecs.writeBytes(channelOrigin.requestId, out)
                     LightningCodecs.writeU64(channelOrigin.serviceFee.toLong(), out)
                     LightningCodecs.writeU64(channelOrigin.miningFee.toLong(), out)
+                    LightningCodecs.writeU64(channelOrigin.amount.toLong(), out)
                 }
             }
         }
@@ -92,7 +94,7 @@ sealed class ChannelTlv : Tlv {
                 val origin = when (LightningCodecs.u16(input)) {
                     1 -> Origin.PayToOpenOrigin(
                         paymentHash = LightningCodecs.bytes(input, 32).byteVector32(),
-                        serviceFee = LightningCodecs.u64(input).sat.toMilliSatoshi(),
+                        serviceFee = LightningCodecs.u64(input).sat.toMilliSatoshi(), // sat->msat for backward compat
                         amount = LightningCodecs.u64(input).msat
                     )
 

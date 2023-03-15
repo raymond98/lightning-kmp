@@ -10,7 +10,8 @@ import fr.acinq.lightning.utils.*
 import fr.acinq.lightning.wire.FailureMessage
 
 interface PaymentsDb : IncomingPaymentsDb, OutgoingPaymentsDb {
-    enum class ConfirmationStatus { UNCONFIRMED, CONFIRMED }
+    enum class ConfirmationStatus { DRAFT, UNCONFIRMED, CONFIRMED }
+
     suspend fun setConfirmationStatus(txId: ByteVector32, status: ConfirmationStatus)
 }
 
@@ -112,14 +113,14 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
     /** Returns the confirmed reception timestamp. If any on-chain parts have NOT yet confirmed, returns null. */
     override val completedAt: Long?
         get() {
-            val anyNotConfirmed = received?.receivedWith?.any { part ->
+            val allConfirmed = received?.receivedWith?.all { part ->
                 when (part) {
-                    is ReceivedWith.NewChannel -> !part.confirmed
-                    is ReceivedWith.SpliceIn -> !part.confirmed
-                    else -> false
+                    is ReceivedWith.NewChannel -> part.status == PaymentsDb.ConfirmationStatus.CONFIRMED
+                    is ReceivedWith.SpliceIn -> part.status == PaymentsDb.ConfirmationStatus.CONFIRMED
+                    is ReceivedWith.LightningPayment -> true
                 }
             } ?: false
-            return if (anyNotConfirmed) null else received?.receivedAt
+            return if (allConfirmed) received?.receivedAt else null
         }
 
     /** Total fees paid to receive this payment. */
@@ -177,17 +178,18 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
          * @param serviceFee Fees paid to Lightning Service Provider to open this channel.
          * @param fundingFee Feed paid to bitcoin miners for processing the L1 transaction.
          * @param channelId The long id of the channel created to receive this payment. May be null if the channel id is not known.
-         * @param confirmed The newly created channel will not be immediately usable, its funding tx must first reach a certain number of confirmations
-         *                  in the blockchain. This boolean is provided here as a convenience in case the implementor chooses to use this class directly,
-         *                  but it is up to the implementor to listen to the correct channel event and update it when the channel is confirmed.
+         * @param status When the payment part is tied to an on-chain transaction (channel creation or splice), the process goes through several steps:
+         *               - drafted: the transaction is being negotiated and may be aborted. Do not display the amount to users
+         *               - unconfirmed: the transaction has been published but isn't confirmed yet and the amount cannot be spent. Should be displayed as "pending"
+         *               - confirmed: the transaction has been confirmed and the amount can be spent. Should be displayed as "received"
          */
         data class NewChannel(
             val id: UUID,
             override val amount: MilliSatoshi,
             val serviceFee: MilliSatoshi,
             val fundingFee: Satoshi = 0.sat,
-            val channelId: ByteVector32?,
-            val confirmed: Boolean = false
+            val channelId: ByteVector32,
+            val status: PaymentsDb.ConfirmationStatus
         ) : ReceivedWith() {
             override val fees: MilliSatoshi = serviceFee + fundingFee.toMilliSatoshi()
         }
@@ -197,8 +199,8 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
             override val amount: MilliSatoshi,
             val serviceFee: MilliSatoshi,
             val fundingFee: Satoshi = 0.sat,
-            val channelId: ByteVector32?,
-            val confirmed: Boolean = false
+            val channelId: ByteVector32,
+            val status: PaymentsDb.ConfirmationStatus
         ) : ReceivedWith() {
             override val fees: MilliSatoshi = serviceFee + fundingFee.toMilliSatoshi()
         }
