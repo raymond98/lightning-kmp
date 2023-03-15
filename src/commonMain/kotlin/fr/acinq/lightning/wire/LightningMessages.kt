@@ -854,7 +854,7 @@ data class SpliceInit(
     override val type: Long get() = SpliceInit.type
     val requireConfirmedInputs: Boolean = tlvStream.get<ChannelTlv.RequireConfirmedInputsTlv>()?.let { true } ?: false
     val pushAmount: MilliSatoshi = tlvStream.get<ChannelTlv.PushAmountTlv>()?.amount ?: 0.msat
-    val channelOrigins: List<Origin> = tlvStream.get<ChannelTlv.OriginsTlv>()?.channelOrigins ?: emptyList()
+    val origins: List<Origin.PayToOpenOrigin> = tlvStream.get<ChannelTlv.OriginsTlv>()?.origins?.filterIsInstance<Origin.PayToOpenOrigin>() ?: emptyList()
 
     constructor(channelId: ByteVector32, fundingAmount: Satoshi, lockTime: Long, feerate: FeeratePerKw, pushAmount: MilliSatoshi) : this(
         channelId,

@@ -207,8 +207,18 @@ data class Normal(
                                         add(ChannelAction.Blockchain.SendWatch(watchConfirmed))
                                         // We're not a liquidity provider, so we don't mind sending our signatures immediately.
                                         add(ChannelAction.Message.Send(signedFundingTx.localSigs))
-                                        // If we initiated the splice and added some funds ourselves
                                         // If we received or sent funds as part of the splice, we will add a corresponding entry to our incoming/outgoing payments db
+                                        addAll(spliceStatus.origins.map { origin ->
+                                            ChannelAction.Storage.StoreIncomingPayment.ViaSpliceIn(
+                                                amount = origin.amount,
+                                                serviceFee = origin.serviceFee,
+                                                miningFee = origin.miningFee,
+                                                localInputs = spliceStatus.fundingTx.localInputs.map { it.outPoint }.toSet(),
+                                                txId = signedFundingTx.txId,
+                                                origin = origin
+                                            )
+                                        })
+                                        // If we initiated the splice and added some funds ourselves it's a swap-in
                                         if (spliceStatus.fundingTx.localInputs.isNotEmpty()) add(
                                             ChannelAction.Storage.StoreIncomingPayment.ViaSpliceIn(
                                                 amount = spliceStatus.fundingTx.localInputs.map { i -> i.previousTx.txOut[i.previousTxOutput.toInt()].amount }.sum().toMilliSatoshi() - spliceStatus.fundingTx.fees.toMilliSatoshi(),
@@ -407,7 +417,7 @@ data class Normal(
                                     previousRemoteBalance = parentCommitment.localCommit.spec.toRemote.truncateToSatoshi(),
                                     toSend, previousTxs = emptyList()
                                 )
-                                val nextState = this@Normal.copy(spliceStatus = SpliceStatus.InProgress(replyTo = null, session, localPushAmount = 0.msat, remotePushAmount = cmd.message.pushAmount, origins = cmd.message.channelOrigins))
+                                val nextState = this@Normal.copy(spliceStatus = SpliceStatus.InProgress(replyTo = null, session, localPushAmount = 0.msat, remotePushAmount = cmd.message.pushAmount, origins = cmd.message.origins))
                                 Pair(nextState, listOf(ChannelAction.Message.Send(SpliceAck(channelId, fundingParams.localAmount))))
                             } else {
                                 logger.info { "rejecting splice attempt: channel is not idle" }
@@ -666,7 +676,7 @@ data class Normal(
                 val spliceSession: InteractiveTxSession,
                 val localPushAmount: MilliSatoshi,
                 val remotePushAmount: MilliSatoshi,
-                val origins: List<Origin>
+                val origins: List<Origin.PayToOpenOrigin>
             ) : SpliceStatus()
 
             data class WaitForCommitSig(
@@ -674,7 +684,7 @@ data class Normal(
                 val fundingParams: InteractiveTxParams,
                 val fundingTx: SharedTransaction,
                 val commitTxs: Helpers.Funding.FirstCommitTxs,
-                val origins: List<Origin>
+                val origins: List<Origin.PayToOpenOrigin>
             ) : SpliceStatus()
 
             object Aborted : SpliceStatus()

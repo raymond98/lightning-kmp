@@ -113,12 +113,12 @@ sealed class ChannelTlv : Tlv {
     }
 
     /** With rbfed splices we can have multiple origins*/
-    data class OriginsTlv(val channelOrigins: List<Origin>) : ChannelTlv() {
+    data class OriginsTlv(val origins: List<Origin>) : ChannelTlv() {
         override val tag: Long get() = OriginsTlv.tag
 
         override fun write(out: Output) {
-            LightningCodecs.writeU16(channelOrigins.size, out)
-            channelOrigins.forEach { OriginTlv(it).write(out) }
+            LightningCodecs.writeU16(origins.size, out)
+            origins.forEach { OriginTlv(it).write(out) }
         }
 
         companion object : TlvValueReader<OriginsTlv> {
