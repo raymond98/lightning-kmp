@@ -11,7 +11,9 @@ import fr.acinq.lightning.crypto.KeyManager
 import fr.acinq.lightning.transactions.Scripts
 import fr.acinq.lightning.transactions.Transactions.TransactionWithInputInfo.*
 import fr.acinq.lightning.utils.LoggingContext
+import fr.acinq.lightning.utils.msat
 import fr.acinq.lightning.utils.sat
+import fr.acinq.lightning.utils.toMilliSatoshi
 import fr.acinq.lightning.wire.ClosingSigned
 
 /**
@@ -424,7 +426,10 @@ sealed class Origin {
     abstract val amount: MilliSatoshi
     abstract val serviceFee: MilliSatoshi
     abstract val miningFee: Satoshi
-    data class PayToOpenOrigin(val paymentHash: ByteVector32, override val serviceFee: MilliSatoshi, override val amount: MilliSatoshi) : Origin() { override val miningFee: Satoshi = 0.sat }
+    data class PayToOpenOrigin(val paymentHash: ByteVector32, val fee: Satoshi, override val amount: MilliSatoshi) : Origin() {
+        override val serviceFee: MilliSatoshi = if (fee > 1_000.sat) 1000.sat.toMilliSatoshi() else 0.msat
+        override val miningFee: Satoshi = if (fee > 1_000.sat) fee - 1000.sat else fee
+    }
     data class PleaseOpenChannelOrigin(val requestId: ByteVector32, override val serviceFee: MilliSatoshi, override val miningFee: Satoshi, override val amount: MilliSatoshi) : Origin()
 }
 // @formatter:on

@@ -783,6 +783,7 @@ data class Commitments(
                 )
                 val commitment = commitments1.all.find { it.fundingTxId == fundingTxId }!! // NB: this commitment might be pruned at the next line
                 val commitments2 = commitments1.run { deactivateCommitments() }.run { pruneCommitments() }
+                logger.info { "commitments active=${commitments2.active.map { it.fundingTxIndex}} inactive=${commitments2.inactive.map { it.fundingTxIndex}}" }
                 Either.Right(Pair(commitments2, commitment))
             }
             else -> {

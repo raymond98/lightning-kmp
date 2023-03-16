@@ -181,6 +181,7 @@ data class NodeParams(
             Feature.WakeUpNotificationClient to FeatureSupport.Optional,
             Feature.PayToOpenClient to FeatureSupport.Optional,
             Feature.ChannelBackupClient to FeatureSupport.Optional,
+            Feature.ExperimentalSplice to FeatureSupport.Optional,
         ),
         dustLimit = 546.sat,
         maxRemoteDustLimit = 600.sat,

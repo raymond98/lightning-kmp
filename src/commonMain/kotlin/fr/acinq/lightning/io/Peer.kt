@@ -301,12 +301,14 @@ class Peer(
         watcher.client.connectionState.filter { it == Connection.ESTABLISHED }.first()
         watcher.client.sendElectrumRequest(EstimateFees(2))
         watcher.client.sendElectrumRequest(EstimateFees(6))
-        watcher.client.sendElectrumRequest(EstimateFees(10))
+        watcher.client.sendElectrumRequest(EstimateFees(18))
+        watcher.client.sendElectrumRequest(EstimateFees(144))
         val sortedFees = flow.toList().sortedBy { it.confirmations }
         logger.info { "on-chain fees: $sortedFees" }
         // TODO: If some feerates are null, we may implement a retry
         onChainFeeratesFlow.value = OnChainFeerates(
-            mutualCloseFeerate = sortedFees[2].feerate ?: FeeratePerKw(FeeratePerByte(20.sat)),
+            fundingFeerate = sortedFees[3].feerate ?: FeeratePerKw(FeeratePerByte(2.sat)),
+            mutualCloseFeerate = sortedFees[2].feerate ?: FeeratePerKw(FeeratePerByte(10.sat)),
             claimMainFeerate = sortedFees[1].feerate ?: FeeratePerKw(FeeratePerByte(20.sat)),
             fastFeerate = sortedFees[0].feerate ?: FeeratePerKw(FeeratePerByte(50.sat))
         )
@@ -449,6 +451,16 @@ class Peer(
                 send(WrappedChannelCommand(channel.channelId, ChannelCommand.ExecuteCommand(spliceCommand)))
                 spliceCommand.replyTo.await()
             }
+    }
+
+    suspend fun createInvoice(paymentPreimage: ByteVector32, amount: MilliSatoshi?, description: Either<String, ByteVector32>, expirySeconds: Long? = null) {
+        val command = ReceivePayment(
+            paymentPreimage = paymentPreimage,
+            amount = amount,
+            description = description,
+            expirySeconds = expirySeconds,
+            result = CompletableDeferred())
+        command.result.await()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -903,8 +915,8 @@ class Peer(
                 val balance = cmd.wallet.confirmedBalance
                 when (val channel = channels.values.firstOrNull { it is ChannelStateWithCommitments }) {
                     is ChannelStateWithCommitments -> {
-                        val feerate = onChainFeeratesFlow.filterNotNull().first().mutualCloseFeerate
-                        logger.info { "requesting splice-in using confirmed balance: $balance" }
+                        val feerate = onChainFeeratesFlow.filterNotNull().first().fundingFeerate
+                        logger.info { "requesting splice-in using confirmed balance=$balance feerate=$feerate" }
                         val spliceCommand = Command.Splice.Request(
                             replyTo = CompletableDeferred(),
                             spliceIn = Command.Splice.Request.SpliceIn(cmd.wallet, balance),
