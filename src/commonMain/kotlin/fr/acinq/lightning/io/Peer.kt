@@ -293,16 +293,14 @@ class Peer(
 
     @OptIn(FlowPreview::class)
     private suspend fun updateEstimateFees() {
+        val blockTargets = listOf(2, 6, 18, 144)
         val flow = watcher.client.notifications
             .filterIsInstance<EstimateFeeResponse>()
-            .take(3) // we will send 3 requests, we expect 3 responses
+            .take(blockTargets.size) // we expect as many responses as requests
             .produceIn(this) // creates a ad-hoc receive channel to collect values
             .consumeAsFlow() // once
         watcher.client.connectionState.filter { it == Connection.ESTABLISHED }.first()
-        watcher.client.sendElectrumRequest(EstimateFees(2))
-        watcher.client.sendElectrumRequest(EstimateFees(6))
-        watcher.client.sendElectrumRequest(EstimateFees(18))
-        watcher.client.sendElectrumRequest(EstimateFees(144))
+        blockTargets.forEach { watcher.client.sendElectrumRequest(EstimateFees(it)) }
         val sortedFees = flow.toList().sortedBy { it.confirmations }
         logger.info { "on-chain fees: $sortedFees" }
         // TODO: If some feerates are null, we may implement a retry
