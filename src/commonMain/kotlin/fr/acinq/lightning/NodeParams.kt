@@ -171,7 +171,7 @@ data class NodeParams(
             Feature.BasicMultiPartPayment to FeatureSupport.Optional,
             Feature.Wumbo to FeatureSupport.Optional,
             Feature.StaticRemoteKey to FeatureSupport.Mandatory,
-            Feature.AnchorOutputs to FeatureSupport.Mandatory,
+            Feature.AnchorOutputs to FeatureSupport.Optional, // can't set Mandatory because peers prefers AnchorOutputsZeroFeeHtlcTx
             Feature.DualFunding to FeatureSupport.Mandatory,
             Feature.ShutdownAnySegwit to FeatureSupport.Mandatory,
             Feature.ChannelType to FeatureSupport.Mandatory,
