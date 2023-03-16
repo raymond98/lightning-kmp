@@ -176,7 +176,7 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
          * @param id identifies each parts that contributed to creating a new channel. A single channel may be created by several payment parts.
          * @param amount Our side of the balance of this channel when it's created. This is the amount pushed to us once the creation fees are applied.
          * @param serviceFee Fees paid to Lightning Service Provider to open this channel.
-         * @param fundingFee Feed paid to bitcoin miners for processing the L1 transaction.
+         * @param miningFee Feed paid to bitcoin miners for processing the L1 transaction.
          * @param channelId The long id of the channel created to receive this payment. May be null if the channel id is not known.
          * @param status When the payment part is tied to an on-chain transaction (channel creation or splice), the process goes through several steps:
          *               - drafted: the transaction is being negotiated and may be aborted. Do not display the amount to users
@@ -187,22 +187,24 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
             val id: UUID,
             override val amount: MilliSatoshi,
             val serviceFee: MilliSatoshi,
-            val fundingFee: Satoshi = 0.sat,
+            val miningFee: Satoshi,
             val channelId: ByteVector32,
+            val txId: ByteVector32,
             val status: PaymentsDb.ConfirmationStatus
         ) : ReceivedWith() {
-            override val fees: MilliSatoshi = serviceFee + fundingFee.toMilliSatoshi()
+            override val fees: MilliSatoshi = serviceFee + miningFee.toMilliSatoshi()
         }
 
         data class SpliceIn(
             val id: UUID,
             override val amount: MilliSatoshi,
             val serviceFee: MilliSatoshi,
-            val fundingFee: Satoshi = 0.sat,
+            val miningFee: Satoshi,
             val channelId: ByteVector32,
+            val txId: ByteVector32,
             val status: PaymentsDb.ConfirmationStatus
         ) : ReceivedWith() {
-            override val fees: MilliSatoshi = serviceFee + fundingFee.toMilliSatoshi()
+            override val fees: MilliSatoshi = serviceFee + miningFee.toMilliSatoshi()
         }
     }
 

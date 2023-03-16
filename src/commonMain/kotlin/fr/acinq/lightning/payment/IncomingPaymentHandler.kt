@@ -113,8 +113,9 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                         id = UUID.randomUUID(),
                         amount = action.amount,
                         serviceFee = action.serviceFee,
-                        fundingFee = action.miningFee,
+                        miningFee = action.miningFee,
                         channelId = channelId,
+                        txId = action.txId,
                         status = PaymentsDb.ConfirmationStatus.NOT_LOCKED
                     )
                 )
@@ -139,8 +140,9 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                         id = UUID.randomUUID(),
                         amount = action.amount,
                         serviceFee = action.serviceFee,
-                        fundingFee = action.miningFee,
+                        miningFee = action.miningFee,
                         channelId = channelId,
+                        txId = action.txId,
                         status = PaymentsDb.ConfirmationStatus.NOT_LOCKED
                     )
                 )

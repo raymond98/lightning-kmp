@@ -185,7 +185,7 @@ class IncomingPaymentHandlerTestsCommon : LightningTestSuite() {
                 assertIs<IncomingPayment.ReceivedWith.NewChannel>(part)
                 assertEquals(amountOrigin.amount, part.amount)
                 assertEquals(amountOrigin.serviceFee, part.serviceFee)
-                assertEquals(amountOrigin.miningFee, part.fundingFee)
+                assertEquals(amountOrigin.miningFee, part.miningFee)
                 assertEquals(channelId, part.channelId)
                 assertEquals(PaymentsDb.ConfirmationStatus.NOT_LOCKED, part.status)
             }

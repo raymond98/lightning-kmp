@@ -569,7 +569,6 @@ data class Normal(
                                                     add(ChannelAction.Message.Send(spliceLocked))
                                                 }
                                                 add(ChannelAction.Blockchain.PublishTx(fullySignedTx.signedTx))
-                                                add(ChannelAction.Storage.SetConfirmationStatus(fullySignedTx.txId, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.NOT_LOCKED))
                                                 add(ChannelAction.Storage.StoreState(nextState))
                                             }
                                             Pair(nextState, actions)
@@ -594,7 +593,7 @@ data class Normal(
                                 val (commitments1, commitment) = res.value
                                 val nextState = this@Normal.copy(commitments = commitments1)
                                 val actions = buildList {
-                                    if ((staticParams.useZeroConf || commitment.localFundingStatus is LocalFundingStatus.ConfirmedFundingTx) && commitment.remoteFundingStatus is RemoteFundingStatus.Locked) {
+                                    if (commitment.run { isLocked() }) {
                                         add(ChannelAction.Storage.SetConfirmationStatus(commitment.fundingTxId, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.LOCKED))
                                     }
                                     add(ChannelAction.Storage.StoreState(nextState))

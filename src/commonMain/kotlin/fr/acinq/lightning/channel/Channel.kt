@@ -348,10 +348,12 @@ sealed class ChannelStateWithCommitments : ChannelState() {
         return commitments.run {
             updateLocalFundingStatus(w.tx.txid, fundingStatus).map { (commitments1, commitment) ->
                 val watchSpent = WatchSpent(channelId, commitment.fundingTxId, commitment.commitInput.outPoint.index.toInt(), commitment.commitInput.txOut.publicKeyScript, BITCOIN_FUNDING_SPENT)
-                val actions = listOf(
-                    ChannelAction.Blockchain.SendWatch(watchSpent),
-                    ChannelAction.Storage.SetConfirmationStatus(w.tx.txid, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.NOT_LOCKED),
-                )
+                val actions = buildList {
+                    if (commitment.run { isLocked() }) {
+                        add(ChannelAction.Storage.SetConfirmationStatus(commitment.fundingTxId, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.LOCKED))
+                    }
+                    add(ChannelAction.Blockchain.SendWatch(watchSpent))
+                }
                 Triple(commitments1, commitment, actions)
             }
         }

@@ -742,10 +742,12 @@ class Peer(
                                             sendToPeer(Error(msg.temporaryChannelId, "channel opening fee too high"))
                                             return@withMDC
                                         }
+                                        val fundingFee = Transactions.weight2fee(msg.fundingFeerate, request.wallet.confirmedUtxos.size * Transactions.p2wpkhInputWeight)
                                         // We have to pay the fees for our inputs, so we deduce them from our funding amount.
-                                        val fundingAmount = request.wallet.confirmedBalance - origin.miningFee
-                                        nodeParams._nodeEvents.emit(SwapInEvents.Accepted(request.requestId, serviceFee = origin.serviceFee, fundingFee = origin.miningFee))
-                                        Triple(request.wallet, fundingAmount, origin.serviceFee)
+                                        val fundingAmount = request.wallet.confirmedBalance - fundingFee
+                                        val pushAmount = origin.serviceFee + origin.miningFee.toMilliSatoshi() - fundingFee.toMilliSatoshi()
+                                        nodeParams._nodeEvents.emit(SwapInEvents.Accepted(request.requestId, serviceFee = origin.serviceFee, miningFee = origin.miningFee))
+                                        Triple(request.wallet, fundingAmount, pushAmount)
                                     }
 
                                     else -> {
