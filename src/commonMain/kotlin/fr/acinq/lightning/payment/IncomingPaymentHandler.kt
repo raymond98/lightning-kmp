@@ -16,7 +16,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import org.kodein.log.newLogger
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 
 sealed class PaymentPart {
     abstract val amount: MilliSatoshi
@@ -116,7 +115,7 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                         serviceFee = action.serviceFee,
                         fundingFee = action.miningFee,
                         channelId = channelId,
-                        status = PaymentsDb.ConfirmationStatus.DRAFT
+                        status = PaymentsDb.ConfirmationStatus.NOT_LOCKED
                     )
                 )
                 when (action.origin) {
@@ -142,7 +141,7 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                         serviceFee = action.serviceFee,
                         fundingFee = action.miningFee,
                         channelId = channelId,
-                        status = PaymentsDb.ConfirmationStatus.DRAFT
+                        status = PaymentsDb.ConfirmationStatus.NOT_LOCKED
                     )
                 )
                 when (action.origin) {

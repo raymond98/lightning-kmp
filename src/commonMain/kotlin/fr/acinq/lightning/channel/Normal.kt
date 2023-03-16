@@ -569,7 +569,7 @@ data class Normal(
                                                     add(ChannelAction.Message.Send(spliceLocked))
                                                 }
                                                 add(ChannelAction.Blockchain.PublishTx(fullySignedTx.signedTx))
-                                                add(ChannelAction.Storage.SetConfirmationStatus(fullySignedTx.txId, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.UNCONFIRMED))
+                                                add(ChannelAction.Storage.SetConfirmationStatus(fullySignedTx.txId, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.NOT_LOCKED))
                                                 add(ChannelAction.Storage.StoreState(nextState))
                                             }
                                             Pair(nextState, actions)
@@ -591,9 +591,15 @@ data class Normal(
                         when (val res = commitments.run { updateRemoteFundingStatus(cmd.message.fundingTxid) }) {
                             is Either.Left -> Pair(this@Normal, emptyList())
                             is Either.Right -> {
-                                val (commitments1, _) = res.value
+                                val (commitments1, commitment) = res.value
                                 val nextState = this@Normal.copy(commitments = commitments1)
-                                Pair(nextState, listOf(ChannelAction.Storage.StoreState(nextState)))
+                                val actions = buildList {
+                                    if ((staticParams.useZeroConf || commitment.localFundingStatus is LocalFundingStatus.ConfirmedFundingTx) && commitment.remoteFundingStatus is RemoteFundingStatus.Locked) {
+                                        add(ChannelAction.Storage.SetConfirmationStatus(commitment.fundingTxId, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.LOCKED))
+                                    }
+                                    add(ChannelAction.Storage.StoreState(nextState))
+                                }
+                                Pair(nextState, actions)
                             }
                         }
                     }

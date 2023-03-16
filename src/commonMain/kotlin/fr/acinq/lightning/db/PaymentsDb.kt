@@ -10,7 +10,7 @@ import fr.acinq.lightning.utils.*
 import fr.acinq.lightning.wire.FailureMessage
 
 interface PaymentsDb : IncomingPaymentsDb, OutgoingPaymentsDb {
-    enum class ConfirmationStatus { DRAFT, UNCONFIRMED, CONFIRMED }
+    enum class ConfirmationStatus { NOT_LOCKED, LOCKED }
 
     suspend fun setConfirmationStatus(txId: ByteVector32, status: ConfirmationStatus)
 }
@@ -115,8 +115,8 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
         get() {
             val allConfirmed = received?.receivedWith?.all { part ->
                 when (part) {
-                    is ReceivedWith.NewChannel -> part.status == PaymentsDb.ConfirmationStatus.CONFIRMED
-                    is ReceivedWith.SpliceIn -> part.status == PaymentsDb.ConfirmationStatus.CONFIRMED
+                    is ReceivedWith.NewChannel -> part.status == PaymentsDb.ConfirmationStatus.LOCKED
+                    is ReceivedWith.SpliceIn -> part.status == PaymentsDb.ConfirmationStatus.LOCKED
                     is ReceivedWith.LightningPayment -> true
                 }
             } ?: false

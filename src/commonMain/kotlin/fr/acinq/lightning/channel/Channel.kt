@@ -144,7 +144,7 @@ sealed class ChannelAction {
             data class ViaSpliceOut(override val amount: Satoshi, override val miningFees: Satoshi, override val address: String, override val txId: ByteVector32) : StoreOutgoingPayment()
             data class ViaClose(override val amount: Satoshi, override val miningFees: Satoshi, override val address: String, override val txId: ByteVector32) : StoreOutgoingPayment()
         }
-        data class SetConfirmationStatus(val txId: ByteVector32, val status: ConfirmationStatus) : Storage() { enum class ConfirmationStatus { UNCONFIRMED, CONFIRMED } }
+        data class SetConfirmationStatus(val txId: ByteVector32, val status: ConfirmationStatus) : Storage() { enum class ConfirmationStatus { NOT_LOCKED, LOCKED } }
         data class StoreChannelClosing(val amount: MilliSatoshi, val closingAddress: String, val isSentToDefaultAddress: Boolean) : Storage()
         data class StoreChannelClosed(val closingTxs: List<LightningOutgoingPayment.ClosingTxPart>) : Storage()
     }
@@ -350,7 +350,7 @@ sealed class ChannelStateWithCommitments : ChannelState() {
                 val watchSpent = WatchSpent(channelId, commitment.fundingTxId, commitment.commitInput.outPoint.index.toInt(), commitment.commitInput.txOut.publicKeyScript, BITCOIN_FUNDING_SPENT)
                 val actions = listOf(
                     ChannelAction.Blockchain.SendWatch(watchSpent),
-                    ChannelAction.Storage.SetConfirmationStatus(w.tx.txid, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.UNCONFIRMED),
+                    ChannelAction.Storage.SetConfirmationStatus(w.tx.txid, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.NOT_LOCKED),
                 )
                 Triple(commitments1, commitment, actions)
             }

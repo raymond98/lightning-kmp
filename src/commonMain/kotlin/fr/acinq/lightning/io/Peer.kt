@@ -546,8 +546,8 @@ class Peer(
                         db.payments.setConfirmationStatus(
                             txId = action.txId,
                             status = when(action.status) {
-                                ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.UNCONFIRMED -> PaymentsDb.ConfirmationStatus.UNCONFIRMED
-                                ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.CONFIRMED -> PaymentsDb.ConfirmationStatus.CONFIRMED
+                                ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.NOT_LOCKED -> PaymentsDb.ConfirmationStatus.NOT_LOCKED
+                                ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.LOCKED -> PaymentsDb.ConfirmationStatus.LOCKED
                             }
                         )
                     }
