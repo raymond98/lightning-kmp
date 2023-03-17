@@ -11,10 +11,7 @@ import fr.acinq.lightning.blockchain.fee.OnChainFeerates
 import fr.acinq.lightning.channel.*
 import fr.acinq.lightning.crypto.noise.*
 import fr.acinq.lightning.db.*
-import fr.acinq.lightning.payment.IncomingPaymentHandler
-import fr.acinq.lightning.payment.OutgoingPaymentFailure
-import fr.acinq.lightning.payment.OutgoingPaymentHandler
-import fr.acinq.lightning.payment.PaymentRequest
+import fr.acinq.lightning.payment.*
 import fr.acinq.lightning.serialization.Encryption.from
 import fr.acinq.lightning.transactions.Transactions
 import fr.acinq.lightning.utils.*
@@ -34,13 +31,8 @@ sealed class PeerCommand
 
 /**
  * Try to open a channel, consuming all the spendable utxos in the wallet state provided.
- * @param maxFeeBasisPoints the max total acceptable fee (all included: service fee and mining fee)
- * @param maxFeeFloor as long as fee is below this amount, it's okay (whatever the percentage is)
  */
-data class RequestChannelOpen(val requestId: ByteVector32, val wallet: WalletState, val maxFeeBasisPoints: Int, val maxFeeFloor: Satoshi) : PeerCommand() {
-    /** maximum fee that we are willing to pay for this channel */
-    val maxFee = (wallet.confirmedBalance * maxFeeBasisPoints / 10_000).max(maxFeeFloor)
-}
+data class RequestChannelOpen(val requestId: ByteVector32, val wallet: WalletState) : PeerCommand()
 
 /** Open a channel, consuming all the spendable utxos in the wallet state provided. */
 data class OpenChannel(
@@ -250,7 +242,7 @@ class Peer(
                     logger.info { "swap-in wallet balance: $balance, ${availableWallet.unconfirmedBalance} unconfirmed" }
                     if (balance >= 10_000.sat) {
                         logger.info { "swap-in wallet: requesting channel using confirmed balance: $balance" }
-                        input.send(RequestChannelOpen(Lightning.randomBytes32(), availableWallet, maxFeeBasisPoints = 100, maxFeeFloor = 3_000.sat)) // 100 bips = 1 %
+                        input.send(RequestChannelOpen(Lightning.randomBytes32(), availableWallet))
                         reservedUtxos.union(availableWallet.confirmedUtxos)
                     } else {
                         reservedUtxos
@@ -457,7 +449,9 @@ class Peer(
             amount = amount,
             description = description,
             expirySeconds = expirySeconds,
-            result = CompletableDeferred())
+            result = CompletableDeferred()
+        )
+        send(command)
         command.result.await()
     }
 
@@ -555,7 +549,7 @@ class Peer(
                         logger.info { "storing txid status $action" }
                         db.payments.setConfirmationStatus(
                             txId = action.txId,
-                            status = when(action.status) {
+                            status = when (action.status) {
                                 ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.NOT_LOCKED -> PaymentsDb.ConfirmationStatus.NOT_LOCKED
                                 ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.LOCKED -> PaymentsDb.ConfirmationStatus.LOCKED
                             }
@@ -745,11 +739,11 @@ class Peer(
                             val (wallet, fundingAmount, pushAmount) = when (val origin = msg.origin) {
                                 is Origin.PleaseOpenChannelOrigin -> when (val request = channelRequests[origin.requestId]) {
                                     is RequestChannelOpen -> {
-                                        // Let's verify that the fee is indeed below our max (a honest LSP would not even try)
-                                        val totalFee = origin.serviceFee.truncateToSatoshi() + origin.miningFee
-                                        if (totalFee > request.maxFee) {
-                                            logger.warning { "n:$remoteNodeId c:${msg.temporaryChannelId} rejecting open_channel2: fee is too high (max=${request.maxFee} actual=${totalFee})" }
-                                            sendToPeer(Error(msg.temporaryChannelId, "channel opening fee too high"))
+                                        val totalFee = origin.serviceFee + origin.miningFee.toMilliSatoshi()
+                                        nodeParams.liquidityPolicy.maybeReject(request.wallet.confirmedBalance.toMilliSatoshi(), totalFee, LiquidityEvents.Source.ONCHAIN_WALLET)?.let { rejected ->
+                                            logger.info { "rejecting open_channel2: reason=${rejected.reason}" }
+                                            nodeParams._nodeEvents.emit(rejected)
+                                            sendToPeer(Error(msg.temporaryChannelId, "cancelling open due to local liquidity policy"))
                                             return@withMDC
                                         }
                                         val fundingFee = Transactions.weight2fee(msg.fundingFeerate, request.wallet.confirmedUtxos.size * Transactions.p2wpkhInputWeight)
@@ -914,6 +908,14 @@ class Peer(
                     is ChannelStateWithCommitments -> {
                         val feerate = onChainFeeratesFlow.filterNotNull().first().fundingFeerate
                         logger.info { "requesting splice-in using confirmed balance=$balance feerate=$feerate" }
+
+                        val feeEstimate = Transactions.weight2fee(feerate, 610 + cmd.wallet.confirmedUtxos.size * Transactions.p2wpkhInputWeight)
+                        nodeParams.liquidityPolicy.maybeReject(cmd.wallet.confirmedBalance.toMilliSatoshi(), feeEstimate.toMilliSatoshi(), LiquidityEvents.Source.ONCHAIN_WALLET)?.let { rejected ->
+                            logger.info { "rejecting splice: reason=${rejected.reason}" }
+                            nodeParams._nodeEvents.emit(rejected)
+                            return
+                        }
+
                         val spliceCommand = Command.Splice.Request(
                             replyTo = CompletableDeferred(),
                             spliceIn = Command.Splice.Request.SpliceIn(cmd.wallet, balance),
@@ -932,7 +934,7 @@ class Peer(
                             balance,
                             utxos.size,
                             utxos.size * Transactions.p2wpkhInputWeight,
-                            TlvStream(listOf(PleaseOpenChannelTlv.MaxFees(cmd.maxFeeBasisPoints, cmd.maxFeeFloor), PleaseOpenChannelTlv.GrandParents(grandParents)))
+                            TlvStream(listOf(PleaseOpenChannelTlv.GrandParents(grandParents)))
                         )
                         logger.info { "sending please_open_channel with ${utxos.size} utxos (amount = ${balance})" }
                         sendToPeer(pleaseOpenChannel)

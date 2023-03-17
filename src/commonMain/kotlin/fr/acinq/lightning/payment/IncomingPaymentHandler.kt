@@ -1,6 +1,9 @@
 package fr.acinq.lightning.payment
 
-import fr.acinq.bitcoin.*
+import fr.acinq.bitcoin.ByteVector
+import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.Crypto
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.lightning.*
 import fr.acinq.lightning.Lightning.randomBytes32
 import fr.acinq.lightning.channel.*
@@ -12,10 +15,7 @@ import fr.acinq.lightning.io.PeerCommand
 import fr.acinq.lightning.io.WrappedChannelCommand
 import fr.acinq.lightning.utils.*
 import fr.acinq.lightning.wire.*
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeoutOrNull
 import org.kodein.log.newLogger
-import kotlin.time.Duration
 
 sealed class PaymentPart {
     abstract val amount: MilliSatoshi
@@ -282,27 +282,11 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                             return ProcessAddResult.Rejected(actions, incomingPayment)
                         }
                         else -> {
-                            // If
                             if (payToOpenMinAmount != null) {
                                 val payToOpenFee = payment.parts.filterIsInstance<PayToOpenPart>().map { it.payToOpenRequest.payToOpenFeeSatoshis }.sum().toMilliSatoshi()
-                                val rejection = when (val policy = nodeParams.onTheFlyLiquidityPolicy) {
-                                    is OnTheFlyLiquidityPolicy.Disable -> PayToOpenEvents.Rejected.Reason.PolicySetToDisabled
-                                    is OnTheFlyLiquidityPolicy.Manual -> {
-                                        val replyTo = CompletableDeferred<Boolean>()
-                                        nodeParams._nodeEvents.tryEmit(PayToOpenEvents.ApprovalRequested(payment.amountReceived, payToOpenFee, replyTo))
-                                        val accepted = withTimeoutOrNull(policy.timeout) {
-                                            replyTo.await()
-                                        } ?: false
-                                        if (!accepted) PayToOpenEvents.Rejected.Reason.RejectedByUser else null
-                                    }
-                                    is OnTheFlyLiquidityPolicy.Auto -> {
-                                        if (payToOpenFee.toLong() / payment.amountReceived.toLong() > policy.maxFeeBasisPoints && payToOpenFee > policy.maxFeeFloor) {
-                                            PayToOpenEvents.Rejected.Reason.TooExpensive(policy.maxFeeBasisPoints, policy.maxFeeFloor)
-                                        } else null
-                                    }
-                                }
-                                rejection?.let {
-                                    nodeParams._nodeEvents.tryEmit(PayToOpenEvents.Rejected(payment.amountReceived, payToOpenFee, rejection))
+                                nodeParams.liquidityPolicy.maybeReject(payment.amountReceived, payToOpenFee, LiquidityEvents.Source.OFFCHAIN_PAYMENT)?.let { rejected ->
+                                    logger.info { "rejecting pay-to-open: reason=${rejected.reason}" }
+                                    nodeParams._nodeEvents.emit(rejected)
                                     val actions = payment.parts.map { part ->
                                         val failureMsg = TemporaryNodeFailure
                                         when (part) {
@@ -522,21 +506,5 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
             return minFinalCltvExpiryDelta.toCltvExpiry(currentBlockHeight.toLong())
         }
     }
-
-}
-
-sealed class OnTheFlyLiquidityPolicy {
-    /** Never initiates swap-ins, never accept pay-to-open */
-    object Disable : OnTheFlyLiquidityPolicy()
-
-    /**
-     * Allow automated liquidity managements, within fee limits
-     * @param maxFeeBasisPoints the max total acceptable fee (all included: service fee and mining fee) (100 bips = 1 %)
-     * @param maxFeeFloor as long as fee is below this amount, it's okay (whatever the percentage is)
-     */
-    data class Auto(val maxFeeBasisPoints: Int, val maxFeeFloor: Satoshi) : OnTheFlyLiquidityPolicy()
-
-    /** Requires user interaction */
-    data class Manual(val timeout: Duration) : OnTheFlyLiquidityPolicy()
 
 }

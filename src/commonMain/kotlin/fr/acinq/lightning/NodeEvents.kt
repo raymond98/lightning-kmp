@@ -23,13 +23,19 @@ sealed interface ChannelEvents : NodeEvents {
     data class Confirmed(val state: Normal) : ChannelEvents
 }
 
-sealed interface PayToOpenEvents : NodeEvents {
-    data class Rejected(val amount: MilliSatoshi, val fee: MilliSatoshi, val reason: Reason) : PayToOpenEvents {
+sealed interface LiquidityEvents : NodeEvents {
+    val amount: MilliSatoshi
+    val fee: MilliSatoshi
+    val source: Source
+
+    enum class Source { ONCHAIN_WALLET, OFFCHAIN_PAYMENT }
+    data class Rejected(override val amount: MilliSatoshi, override val fee: MilliSatoshi, override val source: Source, val reason: Reason) : LiquidityEvents {
         sealed class Reason {
             object PolicySetToDisabled : Reason()
             object RejectedByUser : Reason()
-            data class TooExpensive(val maxFeeBasisPoints: Int, val maxFeeFloor: Satoshi) : Reason()
+            data class TooExpensive(val maxAllowed: MilliSatoshi, val actual: MilliSatoshi) : Reason()
         }
     }
-    data class ApprovalRequested(val amount: MilliSatoshi, val fee: MilliSatoshi, val replyTo: CompletableDeferred<Boolean>) : PayToOpenEvents
+
+    data class ApprovalRequested(override val amount: MilliSatoshi, override val fee: MilliSatoshi, override val source: Source, val replyTo: CompletableDeferred<Boolean>) : LiquidityEvents
 }
