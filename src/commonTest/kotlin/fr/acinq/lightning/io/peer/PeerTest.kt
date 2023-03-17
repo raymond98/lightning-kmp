@@ -225,7 +225,7 @@ class PeerTest : LightningTestSuite() {
         val request = bob2alice.expect<PleaseOpenChannel>()
         assertEquals(request.localFundingAmount, 260_000.sat)
 
-        val miningFee = 100.sat
+        val miningFee = 500.sat
         val serviceFee = (internalRequestBob.maxFee - miningFee - 1.sat).toMilliSatoshi()
         // total fee is below max acceptable
         assertTrue(miningFee + serviceFee.truncateToSatoshi() < internalRequestBob.maxFee)
@@ -243,7 +243,8 @@ class PeerTest : LightningTestSuite() {
         bob.forward(open)
         val accept = bob2alice.expect<AcceptDualFundedChannel>()
         assertEquals(open.temporaryChannelId, accept.temporaryChannelId)
-        assertEquals(accept.pushAmount, serviceFee)
+        val fundingFee = walletBob.confirmedBalance - accept.fundingAmount
+        assertEquals(accept.pushAmount, serviceFee + miningFee.toMilliSatoshi() - fundingFee.toMilliSatoshi())
         alice.forward(accept)
 
         val txAddInputAlice = alice2bob.expect<TxAddInput>()
@@ -265,7 +266,7 @@ class PeerTest : LightningTestSuite() {
         val txSigsBob = bob2alice.expect<TxSignatures>()
         alice.forward(txSigsBob)
         val (_, aliceState) = alice.expectState<WaitForFundingConfirmed>()
-        assertEquals(aliceState.commitments.latest.localCommit.spec.toLocal, openAlice.fundingAmount.toMilliSatoshi() + serviceFee)
+        assertEquals(aliceState.commitments.latest.localCommit.spec.toLocal, openAlice.fundingAmount.toMilliSatoshi() + serviceFee + miningFee.toMilliSatoshi() - fundingFee.toMilliSatoshi())
         val (_, bobState) = bob.expectState<WaitForFundingConfirmed>()
         // Bob has to deduce from its balance:
         //  - the fees for the channel open (10 000 sat)

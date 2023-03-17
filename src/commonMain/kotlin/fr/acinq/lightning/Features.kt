@@ -319,6 +319,7 @@ data class Features(val activated: Map<Feature, FeatureSupport>, val unknown: Se
             Feature.TrustedSwapInProvider,
             Feature.ChannelBackupClient,
             Feature.ChannelBackupProvider,
+            Feature.ExperimentalSplice,
         )
 
         operator fun invoke(bytes: ByteVector): Features = invoke(bytes.toByteArray())

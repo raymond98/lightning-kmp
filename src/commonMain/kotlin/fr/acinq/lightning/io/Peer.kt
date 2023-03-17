@@ -755,6 +755,7 @@ class Peer(
                                         val fundingFee = Transactions.weight2fee(msg.fundingFeerate, request.wallet.confirmedUtxos.size * Transactions.p2wpkhInputWeight)
                                         // We have to pay the fees for our inputs, so we deduce them from our funding amount.
                                         val fundingAmount = request.wallet.confirmedBalance - fundingFee
+                                        // We pay the other fees by pushing the corresponding amount
                                         val pushAmount = origin.serviceFee + origin.miningFee.toMilliSatoshi() - fundingFee.toMilliSatoshi()
                                         nodeParams._nodeEvents.emit(SwapInEvents.Accepted(request.requestId, serviceFee = origin.serviceFee, miningFee = origin.miningFee))
                                         Triple(request.wallet, fundingAmount, pushAmount)
@@ -776,13 +777,11 @@ class Peer(
                                 val fundingKeyPath = randomKeyPath(4)
                                 val fundingPubkey = nodeParams.keyManager.fundingPublicKey(fundingKeyPath)
                                 val (_, closingPubkeyScript) = nodeParams.keyManager.closingPubkeyScript(fundingPubkey.publicKey)
-                                // We set our max-htlc-value-in-flight to the channel capacity to ensure we can empty our channels with a single htlc.
-                                val maxHtlcValueInFlight = msg.fundingAmount + fundingAmount
                                 val localParams = LocalParams(
                                     nodeParams.nodeId,
                                     fundingKeyPath,
                                     nodeParams.dustLimit,
-                                    maxHtlcValueInFlight.toMilliSatoshi().toLong(),
+                                    nodeParams.maxHtlcValueInFlightMsat,
                                     nodeParams.htlcMinimum,
                                     nodeParams.toRemoteDelayBlocks,
                                     nodeParams.maxAcceptedHtlcs,

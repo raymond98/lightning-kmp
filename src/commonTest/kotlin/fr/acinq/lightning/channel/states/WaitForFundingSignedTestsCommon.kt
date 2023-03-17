@@ -80,7 +80,7 @@ class WaitForFundingSignedTestsCommon : LightningTestSuite() {
 
     @Test
     fun `recv CommitSig -- with channel origin -- pay-to-open`() {
-        val channelOrigin = Origin.PayToOpenOrigin(randomBytes32(), 42_000.msat, TestConstants.alicePushAmount)
+        val channelOrigin = Origin.PayToOpenOrigin(randomBytes32(), 42.sat, TestConstants.alicePushAmount)
         val (_, commitSigAlice, bob, _) = init(bobFundingAmount = 0.sat, alicePushAmount = TestConstants.alicePushAmount, bobPushAmount = 0.msat, channelOrigin = channelOrigin)
         val (bob1, actionsBob1) = bob.process(ChannelCommand.MessageReceived(commitSigAlice))
         assertIs<LNChannel<WaitForFundingConfirmed>>(bob1)

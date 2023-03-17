@@ -173,7 +173,7 @@ class IncomingPaymentHandlerTestsCommon : LightningTestSuite() {
             miningFee = 0.sat,
             localInputs = emptySet(),
             txId = randomBytes32(),
-            origin = Origin.PayToOpenOrigin(amount = payToOpenRequest.amountMsat, paymentHash = payToOpenRequest.paymentHash, serviceFee = payToOpenRequest.payToOpenFeeSatoshis.toMilliSatoshi())
+            origin = Origin.PayToOpenOrigin(amount = payToOpenRequest.amountMsat, paymentHash = payToOpenRequest.paymentHash, fee = payToOpenRequest.payToOpenFeeSatoshis)
         )
         paymentHandler.process(channelId, amountOrigin)
         paymentHandler.db.getIncomingPayment(payToOpenRequest.paymentHash).also { dbPayment ->

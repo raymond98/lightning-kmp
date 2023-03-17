@@ -88,7 +88,6 @@ class SyncingTestsCommon : LightningTestSuite() {
                 assertIs<LNChannel<Syncing>>(state)
                 assertIs<WaitForChannelReady>(state.state.state)
                 actions.hasWatchFundingSpent(fundingTx.txid)
-                actions.has<ChannelAction.Storage.SetConfirmationStatus>()
                 actions.has<ChannelAction.Storage.StoreState>()
             }
         val (_, _) = bob1.process(ChannelCommand.WatchReceived(WatchEventConfirmed(bob.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, fundingTx)))
@@ -96,7 +95,6 @@ class SyncingTestsCommon : LightningTestSuite() {
                 assertIs<LNChannel<Syncing>>(state)
                 assertIs<WaitForChannelReady>(state.state.state)
                 actions.hasWatchFundingSpent(fundingTx.txid)
-                actions.has<ChannelAction.Storage.SetConfirmationStatus>()
                 actions.has<ChannelAction.Storage.StoreState>()
             }
     }
@@ -114,7 +112,6 @@ class SyncingTestsCommon : LightningTestSuite() {
                 assertIs<LNChannel<Syncing>>(state)
                 assertIs<WaitForChannelReady>(state.state.state)
                 actions.hasWatchFundingSpent(previousFundingTx.txid)
-                actions.has<ChannelAction.Storage.SetConfirmationStatus>()
                 actions.has<ChannelAction.Storage.StoreState>()
             }
         val (_, _) = bob2.process(ChannelCommand.WatchReceived(WatchEventConfirmed(bob.channelId, BITCOIN_FUNDING_DEPTHOK, 42, 0, previousFundingTx)))
@@ -122,7 +119,6 @@ class SyncingTestsCommon : LightningTestSuite() {
                 assertIs<LNChannel<Syncing>>(state)
                 assertIs<WaitForChannelReady>(state.state.state)
                 actions.hasWatchFundingSpent(previousFundingTx.txid)
-                actions.has<ChannelAction.Storage.SetConfirmationStatus>()
                 actions.has<ChannelAction.Storage.StoreState>()
             }
     }

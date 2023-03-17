@@ -139,8 +139,6 @@ class ClosingTestsCommon : LightningTestSuite() {
             val (_, _) = aliceClosing.process(ChannelCommand.WatchReceived(WatchEventConfirmed(alice.state.channelId, BITCOIN_FUNDING_DEPTHOK, 561, 3, fundingTx)))
                 .also { (state, actions) ->
                     assertEquals(1, state.commitments.active.size)
-                    assertIs<LocalFundingStatus.ConfirmedFundingTx>(state.commitments.latest.localFundingStatus)
-                    actions.has<ChannelAction.Storage.SetConfirmationStatus>()
                     actions.has<ChannelAction.Storage.StoreState>()
                     actions.hasWatchFundingSpent(fundingTx.txid)
                 }
@@ -151,7 +149,6 @@ class ClosingTestsCommon : LightningTestSuite() {
                 .also { (state, actions) ->
                     assertEquals(1, state.commitments.active.size)
                     assertIs<LocalFundingStatus.ConfirmedFundingTx>(state.commitments.latest.localFundingStatus)
-                    actions.has<ChannelAction.Storage.SetConfirmationStatus>()
                     actions.has<ChannelAction.Storage.StoreState>()
                     assertEquals(actions.findWatch<WatchSpent>().txId, fundingTx.txid)
                 }
