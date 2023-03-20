@@ -593,7 +593,8 @@ data class Normal(
                                 val (commitments1, commitment) = res.value
                                 val nextState = this@Normal.copy(commitments = commitments1)
                                 val actions = buildList {
-                                    if (commitment.run { isLocked() }) {
+                                    // remote will re-emit splice_locked at reconnection, we only emit the event if the commitment is locked for the first time
+                                    if (!commitments.all.find { it.fundingTxId == commitment.fundingTxId }!!.run { isLocked() } && commitment.run { isLocked() }) {
                                         add(ChannelAction.Storage.SetConfirmationStatus(commitment.fundingTxId, ChannelAction.Storage.SetConfirmationStatus.ConfirmationStatus.LOCKED))
                                     }
                                     add(ChannelAction.Storage.StoreState(nextState))

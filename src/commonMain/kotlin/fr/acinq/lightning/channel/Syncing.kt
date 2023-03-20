@@ -130,8 +130,8 @@ data class Syncing(val state: ChannelStateWithCommitments, val waitForTheirReest
                                     .firstOrNull { staticParams.useZeroConf || it.localFundingStatus is LocalFundingStatus.ConfirmedFundingTx }
                                     ?.let {
                                         logger.debug { "re-sending SpliceLocked for fundingTxid=${it.fundingTxId}" }
-                                        val spliceConfirmed = SpliceLocked(channelId, it.fundingTxId)
-                                        actions.add(ChannelAction.Message.Send(spliceConfirmed))
+                                        val spliceLocked = SpliceLocked(channelId, it.fundingTxId)
+                                        actions.add(ChannelAction.Message.Send(spliceLocked))
                                     }
                             }
 
