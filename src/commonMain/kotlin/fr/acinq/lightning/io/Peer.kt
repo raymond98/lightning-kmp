@@ -540,6 +540,7 @@ class Peer(
                                 amountSatoshi = action.amount,
                                 address = action.address,
                                 miningFees = action.miningFees,
+                                txId = action.txId,
                                 createdAt = currentTimestampMillis()
                             )
                         )

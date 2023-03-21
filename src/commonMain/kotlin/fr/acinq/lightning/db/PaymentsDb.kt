@@ -400,6 +400,7 @@ data class SpliceOutgoingPayment(
     val amountSatoshi: Satoshi,
     val address: String,
     val miningFees: Satoshi,
+    val txId: ByteVector32,
     override val createdAt: Long,
     val confirmedAt: Long? = null
 ) : OutgoingPayment() {
