@@ -113,7 +113,7 @@ data class IncomingPayment(val preimage: ByteVector32, val origin: Origin, val r
     /** Returns the confirmed reception timestamp. If any on-chain parts have NOT yet confirmed, returns null. */
     override val completedAt: Long?
         get() {
-            val allConfirmed = received?.receivedWith?.all { part ->
+            val allConfirmed = received?.receivedWith?.takeIf { it.isNotEmpty() }?.all { part ->
                 when (part) {
                     is ReceivedWith.NewChannel -> part.status == PaymentsDb.ConfirmationStatus.LOCKED
                     is ReceivedWith.SpliceIn -> part.status == PaymentsDb.ConfirmationStatus.LOCKED
