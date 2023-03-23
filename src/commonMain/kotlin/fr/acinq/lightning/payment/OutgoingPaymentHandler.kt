@@ -208,7 +208,7 @@ class OutgoingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
     }
 
     private suspend fun processPostRestartFailure(partId: UUID, failure: Either<ChannelException, FailureMessage>): ProcessFailureResult? {
-        when (val payment = db.getOutgoingPaymentFromPartId(partId)) {
+        when (val payment = db.getLightningOutgoingPaymentFromPartId(partId)) {
             null -> {
                 logger.error { "paymentId=$partId doesn't match any known payment attempt" }
                 return null
@@ -277,7 +277,7 @@ class OutgoingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
     }
 
     private suspend fun processPostRestartFulfill(partId: UUID, preimage: ByteVector32): ProcessFulfillResult? {
-        when (val payment = db.getOutgoingPaymentFromPartId(partId)) {
+        when (val payment = db.getLightningOutgoingPaymentFromPartId(partId)) {
             null -> {
                 logger.error { "paymentId=$partId doesn't match any known payment attempt" }
                 return null
@@ -299,7 +299,9 @@ class OutgoingPaymentHandler(val nodeParams: NodeParams, val walletParams: Walle
                 return if (!hasMorePendingParts) {
                     logger.info { "payment successfully sent (wallet restart)" }
                     db.completeOutgoingPaymentOffchain(payment.id, preimage)
-                    val succeeded = db.getOutgoingPayment(payment.id) as LightningOutgoingPayment //  NB: we reload the payment to ensure all parts status are updated
+                    // NB: we reload the payment to ensure all parts status are updated
+                    // this payment cannot be null
+                    val succeeded = db.getLightningOutgoingPayment(payment.id)!!
                     Success(request, succeeded, preimage)
                 } else {
                     PreimageReceived(request, preimage)

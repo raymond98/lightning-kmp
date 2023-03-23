@@ -39,7 +39,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
         val result = outgoingPaymentHandler.sendPayment(payment, mapOf(), alice.currentBlockHeight)
         assertFailureEquals(result as OutgoingPaymentHandler.Failure, OutgoingPaymentHandler.Failure(payment, FinalFailure.InvalidPaymentAmount.toPaymentFailure()))
         assertNull(outgoingPaymentHandler.getPendingPayment(payment.paymentId))
-        assertNull(outgoingPaymentHandler.db.getOutgoingPayment(payment.paymentId))
+        assertNull(outgoingPaymentHandler.db.getLightningOutgoingPayment(payment.paymentId))
     }
 
     @Test
@@ -63,7 +63,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
             val result = outgoingPaymentHandler.sendPayment(payment, mapOf(), alice.currentBlockHeight)
             assertFailureEquals(result as OutgoingPaymentHandler.Failure, OutgoingPaymentHandler.Failure(payment, FinalFailure.FeaturesNotSupported.toPaymentFailure()))
             assertNull(outgoingPaymentHandler.getPendingPayment(payment.paymentId))
-            assertNull(outgoingPaymentHandler.db.getOutgoingPayment(payment.paymentId))
+            assertNull(outgoingPaymentHandler.db.getLightningOutgoingPayment(payment.paymentId))
         }
     }
 
@@ -77,7 +77,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
         assertFailureEquals(result as OutgoingPaymentHandler.Failure, OutgoingPaymentHandler.Failure(payment, FinalFailure.NoAvailableChannels.toPaymentFailure()))
         assertNull(outgoingPaymentHandler.getPendingPayment(payment.paymentId))
 
-        val dbPayment = outgoingPaymentHandler.db.getOutgoingPayment(payment.paymentId) as LightningOutgoingPayment
+        val dbPayment = outgoingPaymentHandler.db.getLightningOutgoingPayment(payment.paymentId)
         assertNotNull(dbPayment)
         assertEquals(100_000.msat, dbPayment.recipientAmount)
         assertEquals(invoice.nodeId, dbPayment.recipient)
@@ -97,7 +97,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
         assertFailureEquals(result as OutgoingPaymentHandler.Failure, OutgoingPaymentHandler.Failure(payment, FinalFailure.InsufficientBalance.toPaymentFailure()))
         assertNull(outgoingPaymentHandler.getPendingPayment(payment.paymentId))
 
-        val dbPayment = outgoingPaymentHandler.db.getOutgoingPayment(payment.paymentId) as LightningOutgoingPayment
+        val dbPayment = outgoingPaymentHandler.db.getLightningOutgoingPayment(payment.paymentId)
         assertNotNull(dbPayment)
         assertEquals(amount, dbPayment.recipientAmount)
         assertTrue(dbPayment.status is LightningOutgoingPayment.Status.Completed.Failed)
@@ -140,7 +140,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
             alice = processResult.first
             assertNotNull(outgoingPaymentHandler.getPendingPayment(payment.paymentId))
 
-            val dbPayment = outgoingPaymentHandler.db.getOutgoingPayment(payment.paymentId) as LightningOutgoingPayment
+            val dbPayment = outgoingPaymentHandler.db.getLightningOutgoingPayment(payment.paymentId)
             assertNotNull(dbPayment)
             assertEquals(LightningOutgoingPayment.Status.Pending, dbPayment.status)
             assertEquals(1, dbPayment.parts.size)
@@ -193,7 +193,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
             alice = processResult.first
             assertNotNull(outgoingPaymentHandler.getPendingPayment(payment.paymentId))
 
-            val dbPayment = outgoingPaymentHandler.db.getOutgoingPayment(payment.paymentId) as LightningOutgoingPayment
+            val dbPayment = outgoingPaymentHandler.db.getLightningOutgoingPayment(payment.paymentId)
             assertNotNull(dbPayment)
             assertEquals(LightningOutgoingPayment.Status.Pending, dbPayment.status)
             assertEquals(1, dbPayment.parts.size)
@@ -588,7 +588,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
             assertEquals(invoice.paymentSecret, payloadC.paymentSecret)
         }
 
-        val dbPayment1 = outgoingPaymentHandler.db.getOutgoingPayment(payment.paymentId) as LightningOutgoingPayment
+        val dbPayment1 = outgoingPaymentHandler.db.getLightningOutgoingPayment(payment.paymentId)
         assertNotNull(dbPayment1)
         assertTrue(dbPayment1.status is LightningOutgoingPayment.Status.Pending)
         assertEquals(2, dbPayment1.parts.filter { (it as LightningOutgoingPayment.LightningPart).status is LightningOutgoingPayment.LightningPart.Status.Failed }.size)
@@ -612,7 +612,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
         assertEquals(setOf(preimage), success2.payment.parts.map { ((it as LightningOutgoingPayment.LightningPart).status as LightningOutgoingPayment.LightningPart.Status.Succeeded).preimage }.toSet())
 
         assertNull(outgoingPaymentHandler.getPendingPayment(payment.paymentId))
-        val dbPayment2 = outgoingPaymentHandler.db.getOutgoingPayment(payment.paymentId) as LightningOutgoingPayment
+        val dbPayment2 = outgoingPaymentHandler.db.getLightningOutgoingPayment(payment.paymentId)
         assertNotNull(dbPayment2)
         assertTrue(dbPayment2.status is LightningOutgoingPayment.Status.Completed.Succeeded.OffChain)
         assertEquals(2, dbPayment2.parts.size)
@@ -1026,7 +1026,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
     }
 
     private suspend fun assertDbPaymentFailed(db: OutgoingPaymentsDb, paymentId: UUID, partsCount: Int) {
-        val dbPayment = db.getOutgoingPayment(paymentId) as LightningOutgoingPayment
+        val dbPayment = db.getLightningOutgoingPayment(paymentId)
         assertNotNull(dbPayment)
         assertTrue(dbPayment.status is LightningOutgoingPayment.Status.Completed.Failed)
         assertEquals(partsCount, dbPayment.parts.size)
@@ -1034,7 +1034,7 @@ class OutgoingPaymentHandlerTestsCommon : LightningTestSuite() {
     }
 
     private suspend fun assertDbPaymentSucceeded(db: OutgoingPaymentsDb, paymentId: UUID, amount: MilliSatoshi, fees: MilliSatoshi, partsCount: Int) {
-        val dbPayment = db.getOutgoingPayment(paymentId) as LightningOutgoingPayment
+        val dbPayment = db.getLightningOutgoingPayment(paymentId)
         assertNotNull(dbPayment)
         assertEquals(amount, dbPayment.recipientAmount)
         assertEquals(fees, dbPayment.fees)

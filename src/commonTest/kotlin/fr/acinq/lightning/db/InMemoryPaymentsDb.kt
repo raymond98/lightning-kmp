@@ -71,7 +71,7 @@ class InMemoryPaymentsDb : PaymentsDb {
         }
     }
 
-    override suspend fun getOutgoingPayment(id: UUID): OutgoingPayment? {
+    override suspend fun getLightningOutgoingPayment(id: UUID): LightningOutgoingPayment? {
         return outgoing[id]?.let { payment ->
             val parts = outgoingParts.values.filter { it.first == payment.id }.map { it.second }
             return when (payment.status) {
@@ -125,10 +125,10 @@ class InMemoryPaymentsDb : PaymentsDb {
         outgoingParts[partId] = Pair(parentId, (part as LightningOutgoingPayment.LightningPart).copy(status = LightningOutgoingPayment.LightningPart.Status.Succeeded(preimage, completedAt)))
     }
 
-    override suspend fun getOutgoingPaymentFromPartId(partId: UUID): LightningOutgoingPayment? {
+    override suspend fun getLightningOutgoingPaymentFromPartId(partId: UUID): LightningOutgoingPayment? {
         return outgoingParts[partId]?.let { (parentId, _) ->
             require(outgoing.contains(parentId)) { "parent outgoing payment with id=$parentId doesn't exist" }
-            getOutgoingPayment(parentId) as LightningOutgoingPayment
+            getLightningOutgoingPayment(parentId)
         }
     }
 
