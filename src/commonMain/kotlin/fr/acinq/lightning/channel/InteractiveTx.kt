@@ -92,11 +92,9 @@ data class InteractiveTxParams(
                 )
                 dummyTx.weight() + SharedFundingInput.Multisig2of2.weight
             } else 0
-            // TODO: use proper weight() method when it is released in bitcoin-kmp (https://github.com/ACINQ/bitcoin-kmp/pull/84)
-            val dummyWalletWitness = Script.witnessPay2wpkh(Transactions.PlaceHolderPubKey, Scripts.der(Transactions.PlaceHolderSig, SigHash.SIGHASH_ALL))
-            val spliceInputsWeight = 4 * spliceIn.map { TxIn(it.outPoint, ByteVector.empty, 0, dummyWalletWitness) }.sumOf { TxIn.write(it).size } + ScriptWitness.write(dummyWalletWitness).size
-            val spliceOutputsWeight = 4 * spliceOut.sumOf { TxOut.write(it).size }
-            val weight = commonFieldsWeight + spliceInputsWeight + spliceOutputsWeight + 3 // TODO magic!!
+            val spliceInputsWeight = spliceIn.size * Transactions.p2wpkhInputWeight
+            val spliceOutputsWeight = spliceOut.sumOf { it.weight() }
+            val weight = commonFieldsWeight + spliceInputsWeight + spliceOutputsWeight
             val fees = Transactions.weight2fee(targetFeerate, weight.toInt())
             return commitment.localCommit.spec.toLocal.truncateToSatoshi() + spliceIn.map { it.amount }.sum() - spliceOut.map { it.amount }.sum() - fees
         }
