@@ -56,6 +56,7 @@ sealed class Command {
                 object CannotStartSession : Failure()
                 data class InteractiveTxSessionFailed(val reason: InteractiveTxSessionAction.RemoteFailure) : Failure()
                 data class CannotCreateCommitTx(val reason: ChannelException) : Failure()
+                data class AbortedByPeer(val reason: String) : Failure()
                 object Disconnected : Failure()
             }
         }
