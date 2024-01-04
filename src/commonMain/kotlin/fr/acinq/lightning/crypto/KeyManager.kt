@@ -127,13 +127,8 @@ interface KeyManager {
         val userPrivateKey: PrivateKey = userExtendedPrivateKey.privateKey
         val userPublicKey: PublicKey = userPrivateKey.publicKey()
 
-        val userRefundPrivateKey: PrivateKey = DeterministicWallet.derivePrivateKey(userRefundExtendedPrivateKey, 0).privateKey
-        val userRefundPublicKey: PublicKey = userRefundPrivateKey.publicKey()
-
         private val localServerExtendedPrivateKey: DeterministicWallet.ExtendedPrivateKey = DeterministicWallet.derivePrivateKey(master, swapInLocalServerKeyPath(chain))
         fun localServerPrivateKey(remoteNodeId: PublicKey): PrivateKey = DeterministicWallet.derivePrivateKey(localServerExtendedPrivateKey, perUserPath(remoteNodeId)).privateKey
-
-        val swapInProtocol = SwapInProtocol(userPublicKey, remoteServerPublicKey, userRefundPublicKey, refundDelay)
 
         // this is a private descriptor that can be used as-is to recover swap-in funds once the refund delay has passed
         // it is compatible with address rotation as long as refund keys are derived directly from userRefundExtendedPrivateKey
@@ -152,7 +147,18 @@ interface KeyManager {
             return legacySwapInProtocol.signSwapInputUser(fundingTx, index, parentTxOuts[fundingTx.txIn[index].outPoint.index.toInt()], userPrivateKey)
         }
 
-        fun signSwapInputUser(fundingTx: Transaction, index: Int, parentTxOuts: List<TxOut>, privateNonce: SecretNonce, userNonce: IndividualNonce, serverNonce: IndividualNonce): Either<Throwable, ByteVector32> {
+        /**
+         * @param addressIndex address index
+         * @return the swap-in protocol that matches the input public key script
+         */
+        fun getSwapInProtocol(addressIndex: Int): SwapInProtocol {
+            val userRefundPrivateKey: PrivateKey = DeterministicWallet.derivePrivateKey(userRefundExtendedPrivateKey, addressIndex.toLong()).privateKey
+            val userRefundPublicKey: PublicKey = userRefundPrivateKey.publicKey()
+            return SwapInProtocol(userPublicKey, remoteServerPublicKey, userRefundPublicKey, refundDelay)
+        }
+
+        fun signSwapInputUser(fundingTx: Transaction, index: Int, parentTxOuts: List<TxOut>, privateNonce: SecretNonce, userNonce: IndividualNonce, serverNonce: IndividualNonce, addressIndex: Int): Either<Throwable, ByteVector32> {
+            val swapInProtocol = getSwapInProtocol(addressIndex)
             return swapInProtocol.signSwapInputUser(fundingTx, index, parentTxOuts, userPrivateKey, privateNonce, userNonce, serverNonce)
         }
 
@@ -164,7 +170,8 @@ interface KeyManager {
          * @return a signed transaction that spends our swap-in transaction. It cannot be published until `swapInTx` has enough confirmations
          */
         fun createRecoveryTransaction(swapInTx: Transaction, address: String, feeRate: FeeratePerKw): Transaction? {
-            val utxos = swapInTx.txOut.filter { it.publicKeyScript.contentEquals(Script.write(legacySwapInProtocol.pubkeyScript)) || it.publicKeyScript.contentEquals(Script.write(swapInProtocol.pubkeyScript)) }
+            val swapInProtocols = (0 until 100).map { getSwapInProtocol(it) }
+            val utxos = swapInTx.txOut.filter { it.publicKeyScript.contentEquals(Script.write(legacySwapInProtocol.pubkeyScript)) || swapInProtocols.find { p -> p.serializedPubkeyScript == it.publicKeyScript } != null }
             return if (utxos.isEmpty()) {
                 null
             } else {
@@ -182,6 +189,9 @@ interface KeyManager {
                             val sig = legacySwapInProtocol.signSwapInputUser(tx, index, utxo, userPrivateKey)
                             tx.updateWitness(index, legacySwapInProtocol.witnessRefund(sig))
                         } else {
+                            val i = swapInProtocols.indexOfFirst { it.serializedPubkeyScript == utxo.publicKeyScript }
+                            val userRefundPrivateKey: PrivateKey = DeterministicWallet.derivePrivateKey(userRefundExtendedPrivateKey, i.toLong()).privateKey
+                            val swapInProtocol = swapInProtocols[i]
                             val sig = swapInProtocol.signSwapInputRefund(tx, index, utxos, userRefundPrivateKey)
                             tx.updateWitness(index, swapInProtocol.witnessRefund(sig))
                         }

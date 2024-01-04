@@ -136,6 +136,7 @@ sealed class InteractiveTxInput {
         override val previousTx: Transaction,
         override val previousTxOutput: Long,
         override val sequence: UInt,
+        val addressIndex: Int,
         val userKey: PublicKey,
         val serverKey: PublicKey,
         val userRefundKey: PublicKey,
@@ -301,21 +302,24 @@ data class FundingContributions(val inputs: List<InteractiveTxInput.Outgoing>, v
             }
             val sharedInput = sharedUtxo?.let { (i, balances) -> listOf(InteractiveTxInput.Shared(0, i.info.outPoint, i.info.txOut.publicKeyScript, 0xfffffffdU, balances.toLocal, balances.toRemote, balances.toHtlcs)) } ?: listOf()
             val localInputs = walletInputs.map { i ->
-                when {
-                    Script.isPay2wsh(i.previousTx.txOut[i.outputIndex].publicKeyScript.toByteArray()) ->
-                        InteractiveTxInput.LocalLegacySwapIn(
+                when (val meta = i.addressMeta) {
+                    is WalletState.Companion.AddressMeta.Derived -> {
+                        val swapInProtocol = swapInKeys.getSwapInProtocol(meta.index)
+                        InteractiveTxInput.LocalSwapIn(
                             0,
                             i.previousTx.stripInputWitnesses(),
                             i.outputIndex.toLong(),
                             0xfffffffdU,
-                            swapInKeys.userPublicKey, swapInKeys.remoteServerPublicKey, swapInKeys.refundDelay
+                            addressIndex = meta.index,
+                            swapInProtocol.userPublicKey, swapInProtocol.serverPublicKey, swapInProtocol.userRefundKey, swapInProtocol.refundDelay
                         )
-                    else -> InteractiveTxInput.LocalSwapIn(
+                    }
+                    else -> InteractiveTxInput.LocalLegacySwapIn(
                         0,
                         i.previousTx.stripInputWitnesses(),
                         i.outputIndex.toLong(),
                         0xfffffffdU,
-                        swapInKeys.userPublicKey, swapInKeys.remoteServerPublicKey, swapInKeys.userRefundPublicKey, swapInKeys.refundDelay
+                        swapInKeys.userPublicKey, swapInKeys.remoteServerPublicKey, swapInKeys.refundDelay
                     )
                 }
             }
@@ -456,7 +460,7 @@ data class SharedTransaction(
                     // We generate our secret nonce when sending the corresponding input, we know it exists in the map.
                     val userNonce = session.secretNonces[input.serialId]!!
                     val serverNonce = remoteNonces[input.serialId]!!
-                    keyManager.swapInOnChainWallet.signSwapInputUser(unsignedTx, i, previousOutputs, userNonce.first, userNonce.second, serverNonce)
+                    keyManager.swapInOnChainWallet.signSwapInputUser(unsignedTx, i, previousOutputs, userNonce.first, userNonce.second, serverNonce, input.addressIndex)
                         .map { TxSignaturesTlv.PartialSignature(it, userNonce.second, serverNonce) }
                         .getOrDefault(null)
                 }
@@ -689,7 +693,8 @@ data class InteractiveTxSession(
                         TxAddInput(fundingParams.channelId, msg.value.serialId, msg.value.previousTx, msg.value.previousTxOutput, msg.value.sequence, TlvStream(swapInParams))
                     }
                     is InteractiveTxInput.LocalSwapIn -> {
-                        val swapInParams = TxAddInputTlv.SwapInParams(swapInKeys.userPublicKey, swapInKeys.remoteServerPublicKey, swapInKeys.userRefundPublicKey, swapInKeys.refundDelay)
+                        val swapInProtocol = swapInKeys.getSwapInProtocol(msg.value.addressIndex)
+                        val swapInParams = TxAddInputTlv.SwapInParams(swapInProtocol.userPublicKey, swapInProtocol.serverPublicKey, swapInProtocol.userRefundKey, swapInProtocol.refundDelay)
                         TxAddInput(fundingParams.channelId, msg.value.serialId, msg.value.previousTx, msg.value.previousTxOutput, msg.value.sequence, TlvStream(swapInParams))
                     }
                     is InteractiveTxInput.Shared -> TxAddInput(fundingParams.channelId, msg.value.serialId, msg.value.outPoint, msg.value.sequence)
