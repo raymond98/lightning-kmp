@@ -409,7 +409,7 @@ object TestsHelper {
     }
 
     fun createWallet(keyManager: KeyManager, amount: Satoshi): Pair<PrivateKey, List<WalletState.Utxo>> {
-        val (privateKey, script) = keyManager.swapInOnChainWallet.run { Pair(userPrivateKey, swapInProtocol.pubkeyScript) }
+        val (privateKey, script) = keyManager.swapInOnChainWallet.run { Pair(userPrivateKey, swapInProtocols[0].pubkeyScript) }
         val parentTx = Transaction(2, listOf(TxIn(OutPoint(TxId(randomBytes32()), 3), 0)), listOf(TxOut(amount, script)), 0)
         return privateKey to listOf(WalletState.Utxo(parentTx, 0, 42))
     }

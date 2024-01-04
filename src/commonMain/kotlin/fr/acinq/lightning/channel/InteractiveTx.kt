@@ -285,13 +285,16 @@ data class FundingContributions(val inputs: List<InteractiveTxInput.Outgoing>, v
                             0xfffffffdU,
                             swapInKeys.userPublicKey, swapInKeys.remoteServerPublicKey, swapInKeys.refundDelay)
 
-                    else -> InteractiveTxInput.LocalSwapIn(
-                        0,
-                        i.previousTx.stripInputWitnesses(),
-                        i.outputIndex.toLong(),
-                        0xfffffffdU,
-                        TxAddInputTlv.SwapInParams(swapInKeys.userPublicKey, swapInKeys.remoteServerPublicKey, swapInKeys.userRefundPublicKey, swapInKeys.refundDelay),
-                    )
+                    else -> {
+                        val swapInProtocol = swapInKeys.getSwapInProtocol(i.previousTx.txOut[i.outputIndex].publicKeyScript)!!
+                        InteractiveTxInput.LocalSwapIn(
+                            0,
+                            i.previousTx.stripInputWitnesses(),
+                            i.outputIndex.toLong(),
+                            0xfffffffdU,
+                            TxAddInputTlv.SwapInParams(swapInProtocol.userPublicKey, swapInProtocol.serverPublicKey, swapInProtocol.userRefundKey, swapInProtocol.refundDelay),
+                        )
+                    }
                 }
             }
             return if (params.isInitiator) {
@@ -674,7 +677,8 @@ data class InteractiveTxSession(
                     }
 
                     is InteractiveTxInput.LocalSwapIn -> {
-                        val swapInParams = TxAddInputTlv.SwapInParams(swapInKeys.userPublicKey, swapInKeys.remoteServerPublicKey, swapInKeys.userRefundPublicKey, swapInKeys.refundDelay)
+                        val swapInProtocol = swapInKeys.getSwapInProtocol(msg.value.previousTx.txOut[msg.value.previousTxOutput.toInt()].publicKeyScript)!!
+                        val swapInParams = TxAddInputTlv.SwapInParams(swapInProtocol.userPublicKey, swapInProtocol.serverPublicKey, swapInProtocol.userRefundKey, swapInProtocol.refundDelay)
                         TxAddInput(fundingParams.channelId, msg.value.serialId, msg.value.previousTx, msg.value.previousTxOutput, msg.value.sequence, TlvStream(swapInParams))
                     }
 

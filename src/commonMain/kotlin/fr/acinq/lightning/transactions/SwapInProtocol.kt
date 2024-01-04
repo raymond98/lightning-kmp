@@ -34,6 +34,7 @@ class SwapInProtocol(val userPublicKey: PublicKey, val serverPublicKey: PublicKe
     val commonPubKey = commonPubKeyAndParity.first
     private val parity = commonPubKeyAndParity.second
     val pubkeyScript: List<ScriptElt> = Script.pay2tr(commonPubKey)
+    val serializedPubkeyScript = Script.write(pubkeyScript).byteVector()
 
     private val controlBlock = byteArrayOf((Script.TAPROOT_LEAF_TAPSCRIPT + (if (parity) 1 else 0)).toByte()) + internalPubKey.value.toByteArray()
 
