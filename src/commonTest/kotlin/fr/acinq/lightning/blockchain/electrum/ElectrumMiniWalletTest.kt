@@ -152,12 +152,12 @@ class ElectrumMiniWalletTest : LightningTestSuite() {
         val wallet = ElectrumMiniWallet(Block.LivenetGenesisBlock.hash, client, this, loggerFactory)
         wallet.addAddressGenerator(
             {
-            when (it) {
-                0 -> "16MmJT8VqW465GEyckWae547jKVfMB14P8"
-                1 -> "14xb2HATmkBzrHf4CR2hZczEtjYpTh92d2"
-                2 -> "1NHFyu1uJ1UoDjtPjqZ4Et3wNCyMGCJ1qV"
-                else -> Bitcoin.addressFromPublicKeyScript(Block.LivenetGenesisBlock.hash, Script.pay2pkh(randomKey().publicKey())).right!!
-            }
+                when (it) {
+                    0 -> "16MmJT8VqW465GEyckWae547jKVfMB14P8"
+                    1 -> "14xb2HATmkBzrHf4CR2hZczEtjYpTh92d2"
+                    2 -> "1NHFyu1uJ1UoDjtPjqZ4Et3wNCyMGCJ1qV"
+                    else -> Bitcoin.addressFromPublicKeyScript(Block.LivenetGenesisBlock.hash, Script.pay2pkh(randomKey().publicKey())).right!!
+                }
             },
             10
         )
@@ -209,8 +209,8 @@ class ElectrumMiniWalletTest : LightningTestSuite() {
     @Test
     fun `parallel wallets`() = runSuspendTest(timeout = 15.seconds) {
         val client = connectToMainnetServer()
-        val wallet1 = ElectrumMiniWallet(Block.LivenetGenesisBlock.hash, client, this, loggerFactory, name = "addr-16MmJT")
-        val wallet2 = ElectrumMiniWallet(Block.LivenetGenesisBlock.hash, client, this, loggerFactory, name = "addr-14xb2H")
+        val wallet1 = ElectrumMiniWallet(Block.LivenetGenesisBlock.hash, client, this, loggerFactory)
+        val wallet2 = ElectrumMiniWallet(Block.LivenetGenesisBlock.hash, client, this, loggerFactory)
         wallet1.addAddress("16MmJT8VqW465GEyckWae547jKVfMB14P8")
         wallet2.addAddress("14xb2HATmkBzrHf4CR2hZczEtjYpTh92d2")
 

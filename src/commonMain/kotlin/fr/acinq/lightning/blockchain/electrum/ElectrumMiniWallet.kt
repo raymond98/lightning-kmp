@@ -224,7 +224,7 @@ class ElectrumMiniWallet(
                 client.notifications.collect { mailbox.send(WalletCommand.Companion.ElectrumNotification(it)) }
             }
             launch {
-                mailbox.consumeAsFlow().collect { it ->
+                mailbox.consumeAsFlow().collect {
                     when (it) {
                         is WalletCommand.Companion.ElectrumConnected -> {
                             logger.info(mdc()) { "electrum connected" }
