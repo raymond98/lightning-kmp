@@ -661,6 +661,34 @@ class LightningCodecsTestsCommon : LightningTestSuite() {
     }
 
     @Test
+    fun `encode - decode closing messages`() {
+        val channelId = ByteVector32("58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86")
+        val sig1 = ByteVector64("01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101")
+        val sig2 = ByteVector64("02020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202")
+        val sig3 = ByteVector64("03030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303")
+        val testCases = mapOf(
+            // @formatter:off
+            Hex.decode("0028 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86 0000000000000451 00000000") to ClosingComplete(channelId, 1105.sat, 0),
+            Hex.decode("0028 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86 0000000000000451 000c96a8 024001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101") to ClosingComplete(channelId, 1105.sat, 825_000, TlvStream(ClosingCompleteTlv.NoCloserClosee(sig1))),
+            Hex.decode("0028 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86 0000000000000451 00000000 034001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101") to ClosingComplete(channelId, 1105.sat, 0, TlvStream(ClosingCompleteTlv.CloserAndClosee(sig1))),
+            Hex.decode("0028 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86 0000000000000451 00000000 014001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101 034002020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202") to ClosingComplete(channelId, 1105.sat, 0, TlvStream(ClosingCompleteTlv.CloserNoClosee(sig1), ClosingCompleteTlv.CloserAndClosee(sig2))),
+            Hex.decode("0028 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86 0000000000000451 00000000 014001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101 024002020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202 034003030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303") to ClosingComplete(channelId, 1105.sat, 0, TlvStream(ClosingCompleteTlv.CloserNoClosee(sig1), ClosingCompleteTlv.NoCloserClosee(sig2), ClosingCompleteTlv.CloserAndClosee(sig3))),
+            Hex.decode("0029 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86") to ClosingSig(channelId),
+            Hex.decode("0029 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86 024001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101") to ClosingSig(channelId, TlvStream(ClosingSigTlv.NoCloserClosee(sig1))),
+            Hex.decode("0029 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86 034001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101") to ClosingSig(channelId, TlvStream(ClosingSigTlv.CloserAndClosee(sig1))),
+            Hex.decode("0029 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86 014001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101 034002020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202") to ClosingSig(channelId, TlvStream(ClosingSigTlv.CloserNoClosee(sig1), ClosingSigTlv.CloserAndClosee(sig2))),
+            Hex.decode("0029 58a00a6f14e69a2e97b18cf76f755c8551fea9947cf7b6ece9d641013eba5f86 014001010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101 024002020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202 034003030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303") to ClosingSig(channelId, TlvStream(ClosingSigTlv.CloserNoClosee(sig1), ClosingSigTlv.NoCloserClosee(sig2), ClosingSigTlv.CloserAndClosee(sig3))),
+            // @formatter:on
+        )
+        testCases.forEach {
+            val decoded = LightningMessage.decode(it.key)
+            assertEquals(it.value, decoded)
+            val encoded = LightningMessage.encode(it.value)
+            assertArrayEquals(it.key, encoded)
+        }
+    }
+
+    @Test
     fun `nonreg backup channel data`() {
         val channelId = randomBytes32()
         val txHash = TxHash(randomBytes32())
@@ -711,6 +739,12 @@ class LightningCodecsTestsCommon : LightningTestSuite() {
             Hex.decode("0027") + channelId.toByteArray() + Hex.decode("00000000075bcd15") + signature.toByteArray() + Hex.decode("03 02 0102") + Hex.decode("fe47010000 00") to ClosingSigned(channelId, 123456789.sat, signature, TlvStream(setOf(ClosingSignedTlv.ChannelData(EncryptedChannelData.empty)), setOf(GenericTlv(3, ByteVector("0102"))))),
             Hex.decode("0027") + channelId.toByteArray() + Hex.decode("00000000075bcd15") + signature.toByteArray() + Hex.decode("fe47010000 07 cccccccccccccc") to ClosingSigned(channelId, 123456789.sat, signature).withChannelData(ByteVector("cccccccccccccc")),
             Hex.decode("0027") + channelId.toByteArray() + Hex.decode("00000000075bcd15") + signature.toByteArray() + Hex.decode("03 02 0102") + Hex.decode("fe47010000 07 cccccccccccccc") to ClosingSigned(channelId, 123456789.sat, signature, TlvStream(setOf(ClosingSignedTlv.ChannelData(EncryptedChannelData(ByteVector("cccccccccccccc")))), setOf(GenericTlv(3, ByteVector("0102")))))
+            // closing_complete
+            Hex.decode("0028") + channelId.toByteArray() + Hex.decode("0000000000000451 00000000") + Hex.decode("fe47010000 00") to ClosingComplete(channelId, 1105.sat, 0, TlvStream(ClosingCompleteTlv.ChannelData(EncryptedChannelData.empty))),
+            Hex.decode("0028") + channelId.toByteArray() + Hex.decode("0000000000000451 00000000") + Hex.decode("fe47010000 07 cccccccccccccc") to ClosingComplete(channelId, 1105.sat, 0).withChannelData(ByteVector("cccccccccccccc")),
+            // closing_sig
+            Hex.decode("0029") + channelId.toByteArray() + Hex.decode("fe47010000 00") to ClosingSig(channelId, TlvStream(ClosingSigTlv.ChannelData(EncryptedChannelData.empty))),
+            Hex.decode("0029") + channelId.toByteArray() + Hex.decode("fe47010000 07 cccccccccccccc") to ClosingSig(channelId).withChannelData(ByteVector("cccccccccccccc")),
         )
         // @formatter:on
 
@@ -734,20 +768,13 @@ class LightningCodecsTestsCommon : LightningTestSuite() {
             RevokeAndAck(randomBytes32(), randomKey(), randomKey().publicKey()),
             Shutdown(randomBytes32(), ByteVector("deadbeef")),
             ClosingSigned(randomBytes32(), 0.sat, randomBytes64()),
+            ClosingComplete(randomBytes32(), 250.sat, 0),
+            ClosingSig(randomBytes32()),
         )
         messages.forEach {
             assertEquals(it.withChannelData(belowLimit).channelData, belowLimit)
             assertTrue(it.withChannelData(aboveLimit).channelData.isEmpty())
         }
-    }
-
-    @Test
-    fun `skip backup channel data when message is too large`() {
-        val channelData = EncryptedChannelData(ByteVector(ByteArray(59500) { 42 }))
-        val smallCommit = CommitSig(randomBytes32(), randomBytes64(), listOf())
-        assertEquals(smallCommit.withChannelData(channelData).channelData, channelData)
-        val largeCommit = CommitSig(randomBytes32(), randomBytes64(), List(50) { randomBytes64() })
-        assertTrue(largeCommit.withChannelData(channelData).channelData.isEmpty())
     }
 
     @Test
