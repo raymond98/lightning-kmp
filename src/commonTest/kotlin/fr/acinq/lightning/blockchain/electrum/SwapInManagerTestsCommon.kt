@@ -40,7 +40,7 @@ class SwapInManagerTestsCommon : LightningTestSuite() {
                 WalletState.Utxo(parentTxs[0].txid, 1, 100, parentTxs[0], WalletState.Companion.AddressMeta.Single), // deeply confirmed
                 WalletState.Utxo(parentTxs[1].txid, 0, 149, parentTxs[1], WalletState.Companion.AddressMeta.Single), // recently confirmed
             )
-            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, utxos)
+            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, alreadyUsed = true, utxos)
             WalletState(mapOf(dummyAddress to addressState))
         }
         val cmd = SwapInCommand.TrySwapIn(currentBlockHeight = 150, wallet = wallet, swapInParams = SwapInParams(minConfirmations = 3, maxConfirmations = 720, refundDelay = 900), trustedTxs = emptySet())
@@ -62,7 +62,7 @@ class SwapInManagerTestsCommon : LightningTestSuite() {
                 WalletState.Utxo(parentTxs[0].txid, 0, 100, parentTxs[0], WalletState.Companion.AddressMeta.Single), // recently confirmed
                 WalletState.Utxo(parentTxs[1].txid, 0, 0, parentTxs[1], WalletState.Companion.AddressMeta.Single), // unconfirmed
             )
-            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, utxos)
+            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, alreadyUsed = true, utxos)
             WalletState(mapOf(dummyAddress to addressState))
         }
         val cmd = SwapInCommand.TrySwapIn(currentBlockHeight = 101, wallet = wallet, swapInParams = SwapInParams(minConfirmations = 3, maxConfirmations = 720, refundDelay = 900), trustedTxs = emptySet())
@@ -81,7 +81,7 @@ class SwapInManagerTestsCommon : LightningTestSuite() {
                 WalletState.Utxo(parentTxs[0].txid, 0, 100, parentTxs[0], WalletState.Companion.AddressMeta.Single), // exceeds refund delay
                 WalletState.Utxo(parentTxs[1].txid, 0, 120, parentTxs[1], WalletState.Companion.AddressMeta.Single), // exceeds max confirmation before refund
             )
-            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, utxos)
+            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, alreadyUsed = true, utxos)
             WalletState(mapOf(dummyAddress to addressState))
         }
         val cmd = SwapInCommand.TrySwapIn(currentBlockHeight = 130, wallet = wallet, swapInParams = SwapInParams(minConfirmations = 3, maxConfirmations = 10, refundDelay = 15), trustedTxs = emptySet())
@@ -102,7 +102,7 @@ class SwapInManagerTestsCommon : LightningTestSuite() {
                 WalletState.Utxo(parentTxs[1].txid, 0, 150, parentTxs[1], WalletState.Companion.AddressMeta.Single), // recently confirmed
                 WalletState.Utxo(parentTxs[2].txid, 0, 0, parentTxs[2], WalletState.Companion.AddressMeta.Single), // unconfirmed
             )
-            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, utxos)
+            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, alreadyUsed = true, utxos)
             WalletState(mapOf(dummyAddress to addressState))
         }
         val cmd = SwapInCommand.TrySwapIn(currentBlockHeight = 150, wallet = wallet, swapInParams = SwapInParams(minConfirmations = 5, maxConfirmations = 720, refundDelay = 900), trustedTxs = parentTxs.map { it.txid }.toSet())
@@ -118,7 +118,7 @@ class SwapInManagerTestsCommon : LightningTestSuite() {
         val wallet = run {
             val parentTx = Transaction(2, listOf(TxIn(OutPoint(TxId(randomBytes32()), 1), 0)), listOf(TxOut(75_000.sat, dummyScript)), 0)
             val utxos = listOf(WalletState.Utxo(parentTx.txid, 0, 100, parentTx, WalletState.Companion.AddressMeta.Single))
-            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, utxos)
+            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, alreadyUsed = true, utxos)
             WalletState(mapOf(dummyAddress to addressState))
         }
         val cmd = SwapInCommand.TrySwapIn(currentBlockHeight = 150, wallet = wallet, swapInParams = SwapInParams(minConfirmations = 5, maxConfirmations = 720, refundDelay = 900), trustedTxs = emptySet())
@@ -140,7 +140,7 @@ class SwapInManagerTestsCommon : LightningTestSuite() {
         val (waitForFundingSigned, _) = WaitForFundingSignedTestsCommon.init()
         val wallet = run {
             val utxos = waitForFundingSigned.state.signingSession.fundingTx.tx.localInputs.map { i -> WalletState.Utxo(i.outPoint.txid, i.outPoint.index.toInt(), 100, i.previousTx, WalletState.Companion.AddressMeta.Single) }
-            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, utxos)
+            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, alreadyUsed = true, utxos)
             WalletState(mapOf(dummyAddress to addressState))
         }
         val mgr = SwapInManager(listOf(waitForFundingSigned.state), logger)
@@ -161,7 +161,7 @@ class SwapInManagerTestsCommon : LightningTestSuite() {
         assertEquals(3, inputs.size) // 1 initial funding input and 2 splice inputs
         val wallet = run {
             val utxos = inputs.map { i -> WalletState.Utxo(i.outPoint.txid, i.outPoint.index.toInt(), 100, i.previousTx, WalletState.Companion.AddressMeta.Single) }
-            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, utxos)
+            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, alreadyUsed = true, utxos)
             WalletState(mapOf(dummyAddress to addressState))
         }
         val mgr = SwapInManager(listOf(alice1.state), logger)
@@ -192,7 +192,7 @@ class SwapInManagerTestsCommon : LightningTestSuite() {
         assertIs<LocalFundingStatus.ConfirmedFundingTx>(alice3.commitments.latest.localFundingStatus)
         val wallet = run {
             val utxos = inputs.map { i -> WalletState.Utxo(i.outPoint.txid, i.outPoint.index.toInt(), 100, i.previousTx, WalletState.Companion.AddressMeta.Single) }
-            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, utxos)
+            val addressState = WalletState.Companion.AddressState(WalletState.Companion.AddressMeta.Single, alreadyUsed = true, utxos)
             WalletState(mapOf(dummyAddress to addressState))
         }
         val mgr = SwapInManager(listOf(alice3.state), logger)

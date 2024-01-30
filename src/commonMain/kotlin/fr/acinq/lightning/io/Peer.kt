@@ -190,7 +190,7 @@ class Peer(
     }
 
     val finalWallet = FinalWallet(nodeParams.chain, nodeParams.keyManager.finalOnChainWallet, watcher.client, scope, nodeParams.loggerFactory)
-    val swapInWallet = SwapInWallet(nodeParams.chain, nodeParams.keyManager.swapInOnChainWallet, watcher.client, addressGenerationWindow = 20, scope, nodeParams.loggerFactory)
+    val swapInWallet = SwapInWallet(nodeParams.chain, nodeParams.keyManager.swapInOnChainWallet, watcher.client, scope, nodeParams.loggerFactory)
 
     private var swapInJob: Job? = null
 
