@@ -378,6 +378,7 @@ data class Normal(
                                     targetFeerate = cmd.message.feerate
                                 )
                                 val session = InteractiveTxSession(
+                                    staticParams.remoteNodeId,
                                     channelKeys(),
                                     keyManager.swapInOnChainWallet,
                                     fundingParams,
@@ -459,6 +460,7 @@ data class Normal(
                                         is Either.Right -> {
                                             // The splice initiator always sends the first interactive-tx message.
                                             val (interactiveTxSession, interactiveTxAction) = InteractiveTxSession(
+                                                staticParams.remoteNodeId,
                                                 channelKeys(),
                                                 keyManager.swapInOnChainWallet,
                                                 fundingParams,
@@ -762,7 +764,7 @@ data class Normal(
                 ChannelAction.Storage.StoreOutgoingPayment.ViaSpliceOut(
                     amount = txOut.amount,
                     miningFees = action.fundingTx.sharedTx.tx.localFees.truncateToSatoshi(),
-                    address = Bitcoin.addressFromPublicKeyScript(staticParams.nodeParams.chainHash, txOut.publicKeyScript.toByteArray()).result ?: "unknown",
+                    address = Bitcoin.addressFromPublicKeyScript(staticParams.nodeParams.chainHash, txOut.publicKeyScript.toByteArray()).right ?: "unknown",
                     txId = action.fundingTx.txId
                 )
             })

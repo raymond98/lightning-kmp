@@ -16,7 +16,7 @@ allprojects {
     repositories {
         // using the local maven repository with Kotlin Multi Platform can lead to build errors that are hard to diagnose.
         // uncomment this only if you need to experiment with snapshot dependencies that have not yet be published.
-        // mavenLocal()
+        mavenLocal()
         maven("https://oss.sonatype.org/content/repositories/snapshots")
         mavenCentral()
         google()
@@ -27,7 +27,7 @@ val currentOs = org.gradle.internal.os.OperatingSystem.current()
 
 kotlin {
 
-    val bitcoinKmpVersion = "0.17.0-MUSIG2-SNAPSHOT" // when upgrading bitcoin-kmp, keep secpJniJvmVersion in sync!
+    val bitcoinKmpVersion = "0.17.0-MUSIG2-ABSTRACTIONS-SNAPSHOT" // when upgrading bitcoin-kmp, keep secpJniJvmVersion in sync!
     val secpJniJvmVersion = "0.14.0-MUSIG2-SNAPSHOT"
 
     val serializationVersion = "1.6.2"
