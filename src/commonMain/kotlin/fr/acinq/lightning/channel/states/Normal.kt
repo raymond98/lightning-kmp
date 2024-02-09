@@ -11,6 +11,7 @@ import fr.acinq.lightning.blockchain.BITCOIN_FUNDING_DEPTHOK
 import fr.acinq.lightning.blockchain.WatchConfirmed
 import fr.acinq.lightning.blockchain.WatchEventConfirmed
 import fr.acinq.lightning.blockchain.WatchEventSpent
+import fr.acinq.lightning.blockchain.fee.FeeratePerKw
 import fr.acinq.lightning.channel.*
 import fr.acinq.lightning.transactions.Scripts
 import fr.acinq.lightning.transactions.Transactions
@@ -24,7 +25,7 @@ data class Normal(
     val remoteChannelUpdate: ChannelUpdate?,
     val localShutdown: Shutdown?,
     val remoteShutdown: Shutdown?,
-    val closingFeerates: ClosingFeerates?,
+    val closingFeerate: FeeratePerKw?,
     val spliceStatus: SpliceStatus,
     val liquidityLeases: List<LiquidityAds.Lease>,
 ) : ChannelStateWithCommitments() {
@@ -101,7 +102,7 @@ data class Normal(
                     !Helpers.Closing.isValidFinalScriptPubkey(localScriptPubkey, allowAnySegwit, allowOpReturn) -> handleCommandError(cmd, InvalidFinalScript(channelId), channelUpdate)
                     else -> {
                         val shutdown = Shutdown(channelId, localScriptPubkey)
-                        val newState = this@Normal.copy(localShutdown = shutdown, closingFeerates = cmd.feerates)
+                        val newState = this@Normal.copy(localShutdown = shutdown, closingFeerate = cmd.feerate)
                         val actions = listOf(ChannelAction.Storage.StoreState(newState), ChannelAction.Message.Send(shutdown))
                         Pair(newState, actions)
                     }
@@ -240,22 +241,28 @@ data class Normal(
                                 actions.add(ChannelAction.Message.Send(localShutdown))
                                 if (commitments1.latest.remoteCommit.spec.htlcs.isNotEmpty()) {
                                     // we just signed htlcs that need to be resolved now
-                                    ShuttingDown(commitments1, localShutdown, remoteShutdown, closingFeerates)
+                                    ShuttingDown(commitments1, localShutdown, remoteShutdown, closingFeerate)
                                 } else {
                                     logger.warning { "we have no htlcs but have not replied with our Shutdown yet, this should never happen" }
-                                    val closingTxProposed = if (isInitiator) {
-                                        val (closingTx, closingSigned) = Helpers.Closing.makeFirstClosingTx(
-                                            channelKeys(),
-                                            commitments1.latest,
-                                            localShutdown.scriptPubKey.toByteArray(),
-                                            remoteShutdown.scriptPubKey.toByteArray(),
-                                            closingFeerates ?: ClosingFeerates(currentOnChainFeerates.mutualCloseFeerate),
-                                        )
-                                        listOf(listOf(ClosingTxProposed(closingTx, closingSigned)))
-                                    } else {
-                                        listOf(listOf())
+                                    val closingResult = Helpers.Closing.makeClosingTxs(
+                                        channelKeys(),
+                                        commitments1.latest,
+                                        localShutdown.scriptPubKey,
+                                        remoteShutdown.scriptPubKey,
+                                        closingFeerate ?: currentOnChainFeerates.mutualCloseFeerate
+                                    )
+                                    val proposedClosingTxs = when (closingResult) {
+                                        is Either.Left -> {
+                                            logger.warning { "cannot create local closing txs, waiting for remote closing_complete: ${closingResult.value.message}" }
+                                            listOf()
+                                        }
+                                        is Either.Right -> {
+                                            val (closingTxs, closingComplete) = closingResult.value
+                                            actions.add(ChannelAction.Message.Send(closingComplete))
+                                            listOf(closingTxs)
+                                        }
                                     }
-                                    Negotiating(commitments1, localShutdown, remoteShutdown, closingTxProposed, bestUnpublishedClosingTx = null, closingFeerates)
+                                    Negotiating(commitments1, localShutdown, remoteShutdown, proposedClosingTxs, listOf(), closingFeerate, currentBlockHeight.toLong())
                                 }
                             } else {
                                 this@Normal.copy(commitments = commitments1)
@@ -315,33 +322,31 @@ data class Normal(
                                 if (this@Normal.localShutdown == null) actions.add(ChannelAction.Message.Send(localShutdown))
                                 val commitments1 = commitments.copy(remoteChannelData = cmd.message.channelData)
                                 when {
-                                    commitments1.hasNoPendingHtlcsOrFeeUpdate() && commitments1.params.localParams.isInitiator -> {
-                                        val (closingTx, closingSigned) = Helpers.Closing.makeFirstClosingTx(
+                                    commitments1.hasNoPendingHtlcsOrFeeUpdate() -> {
+                                        val closingResult = Helpers.Closing.makeClosingTxs(
                                             channelKeys(),
                                             commitments1.latest,
-                                            localShutdown.scriptPubKey.toByteArray(),
-                                            cmd.message.scriptPubKey.toByteArray(),
-                                            closingFeerates ?: ClosingFeerates(currentOnChainFeerates.mutualCloseFeerate),
+                                            localShutdown.scriptPubKey,
+                                            cmd.message.scriptPubKey,
+                                            closingFeerate ?: currentOnChainFeerates.mutualCloseFeerate
                                         )
-                                        val nextState = Negotiating(
-                                            commitments1,
-                                            localShutdown,
-                                            cmd.message,
-                                            listOf(listOf(ClosingTxProposed(closingTx, closingSigned))),
-                                            bestUnpublishedClosingTx = null,
-                                            closingFeerates
-                                        )
-                                        actions.addAll(listOf(ChannelAction.Storage.StoreState(nextState), ChannelAction.Message.Send(closingSigned)))
-                                        Pair(nextState, actions)
-                                    }
-                                    commitments1.hasNoPendingHtlcsOrFeeUpdate() -> {
-                                        val nextState = Negotiating(commitments1, localShutdown, cmd.message, listOf(listOf()), null, closingFeerates)
+                                        val nextState = when (closingResult) {
+                                            is Either.Left -> {
+                                                logger.warning { "cannot create local closing txs, waiting for remote closing_complete: ${closingResult.value.message}" }
+                                                Negotiating(commitments1, localShutdown, cmd.message, listOf(), listOf(), closingFeerate, currentBlockHeight.toLong())
+                                            }
+                                            is Either.Right -> {
+                                                val (closingTxs, closingComplete) = closingResult.value
+                                                actions.add(ChannelAction.Message.Send(closingComplete))
+                                                Negotiating(commitments1, localShutdown, cmd.message, listOf(closingTxs), listOf(), closingFeerate, currentBlockHeight.toLong())
+                                            }
+                                        }
                                         actions.add(ChannelAction.Storage.StoreState(nextState))
                                         Pair(nextState, actions)
                                     }
                                     else -> {
                                         // there are some pending changes, we need to wait for them to be settled (fail/fulfill htlcs and sign fee updates)
-                                        val nextState = ShuttingDown(commitments1, localShutdown, cmd.message, closingFeerates)
+                                        val nextState = ShuttingDown(commitments1, localShutdown, cmd.message, closingFeerate)
                                         actions.add(ChannelAction.Storage.StoreState(nextState))
                                         Pair(nextState, actions)
                                     }

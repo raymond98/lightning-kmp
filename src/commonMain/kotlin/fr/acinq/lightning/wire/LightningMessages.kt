@@ -75,7 +75,6 @@ interface LightningMessage {
                 ChannelAnnouncement.type -> ChannelAnnouncement.read(stream)
                 ChannelUpdate.type -> ChannelUpdate.read(stream)
                 Shutdown.type -> Shutdown.read(stream)
-                ClosingSigned.type -> ClosingSigned.read(stream)
                 ClosingComplete.type -> ClosingComplete.read(stream)
                 ClosingSig.type -> ClosingSig.read(stream)
                 OnionMessage.type -> OnionMessage.read(stream)
@@ -1506,44 +1505,6 @@ data class Shutdown(
             return Shutdown(
                 ByteVector32(LightningCodecs.bytes(input, 32)),
                 ByteVector(LightningCodecs.bytes(input, LightningCodecs.u16(input))),
-                TlvStreamSerializer(false, readers).read(input)
-            )
-        }
-    }
-}
-
-data class ClosingSigned(
-    override val channelId: ByteVector32,
-    val feeSatoshis: Satoshi,
-    val signature: ByteVector64,
-    val tlvStream: TlvStream<ClosingSignedTlv> = TlvStream.empty()
-) : ChannelMessage, HasChannelId, HasEncryptedChannelData {
-    override val type: Long get() = ClosingSigned.type
-
-    override val channelData: EncryptedChannelData get() = tlvStream.get<ClosingSignedTlv.ChannelData>()?.ecb ?: EncryptedChannelData.empty
-    override fun withNonEmptyChannelData(ecd: EncryptedChannelData): ClosingSigned = copy(tlvStream = tlvStream.addOrUpdate(ClosingSignedTlv.ChannelData(ecd)))
-
-    override fun write(out: Output) {
-        LightningCodecs.writeBytes(channelId, out)
-        LightningCodecs.writeU64(feeSatoshis.toLong(), out)
-        LightningCodecs.writeBytes(signature, out)
-        TlvStreamSerializer(false, readers).write(tlvStream, out)
-    }
-
-    companion object : LightningMessageReader<ClosingSigned> {
-        const val type: Long = 39
-
-        @Suppress("UNCHECKED_CAST")
-        val readers = mapOf(
-            ClosingSignedTlv.FeeRange.tag to ClosingSignedTlv.FeeRange.Companion as TlvValueReader<ClosingSignedTlv>,
-            ClosingSignedTlv.ChannelData.tag to ClosingSignedTlv.ChannelData.Companion as TlvValueReader<ClosingSignedTlv>
-        )
-
-        override fun read(input: Input): ClosingSigned {
-            return ClosingSigned(
-                ByteVector32(LightningCodecs.bytes(input, 32)),
-                Satoshi(LightningCodecs.u64(input)),
-                ByteVector64(LightningCodecs.bytes(input, 64)),
                 TlvStreamSerializer(false, readers).read(input)
             )
         }

@@ -314,32 +314,6 @@ sealed class ShutdownTlv : Tlv {
     }
 }
 
-sealed class ClosingSignedTlv : Tlv {
-    data class FeeRange(val min: Satoshi, val max: Satoshi) : ClosingSignedTlv() {
-        override val tag: Long get() = FeeRange.tag
-
-        override fun write(out: Output) {
-            LightningCodecs.writeU64(min.toLong(), out)
-            LightningCodecs.writeU64(max.toLong(), out)
-        }
-
-        companion object : TlvValueReader<FeeRange> {
-            const val tag: Long = 1
-            override fun read(input: Input): FeeRange = FeeRange(Satoshi(LightningCodecs.u64(input)), Satoshi(LightningCodecs.u64(input)))
-        }
-    }
-
-    data class ChannelData(val ecb: EncryptedChannelData) : ClosingSignedTlv() {
-        override val tag: Long get() = ChannelData.tag
-        override fun write(out: Output) = LightningCodecs.writeBytes(ecb.data, out)
-
-        companion object : TlvValueReader<ChannelData> {
-            const val tag: Long = 0x47010000
-            override fun read(input: Input): ChannelData = ChannelData(EncryptedChannelData(LightningCodecs.bytes(input, input.availableBytes).toByteVector()))
-        }
-    }
-}
-
 sealed class ClosingCompleteTlv : Tlv {
     /** Signature for a closing transaction containing only the closer's output. */
     data class CloserNoClosee(val sig: ByteVector64) : ClosingCompleteTlv() {
