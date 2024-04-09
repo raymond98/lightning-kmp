@@ -1615,6 +1615,7 @@ data class PayToOpenRequest(
     val paymentHash: ByteVector32,
     val expireAt: Long,
     val finalPacket: OnionRoutingPacket,
+    val liquidity: Satoshi,
     val tlvStream: TlvStream<PayToOpenRequestTlv> = TlvStream.empty(),
 ) : LightningMessage, HasChainHash {
     override val type: Long get() = PayToOpenRequest.type
@@ -1631,6 +1632,7 @@ data class PayToOpenRequest(
         LightningCodecs.writeU32(expireAt.toInt(), out)
         LightningCodecs.writeU16(finalPacket.payload.size(), out)
         OnionRoutingPacketSerializer(finalPacket.payload.size()).write(finalPacket, out)
+        LightningCodecs.writeU64(liquidity.toLong(), out)
         TlvStreamSerializer(false, readers).write(tlvStream, out)
     }
 
@@ -1652,6 +1654,7 @@ data class PayToOpenRequest(
                 paymentHash = ByteVector32(LightningCodecs.bytes(input, 32)),
                 expireAt = LightningCodecs.u32(input).toLong(),
                 finalPacket = OnionRoutingPacketSerializer(LightningCodecs.u16(input)).read(input),
+                liquidity = Satoshi(LightningCodecs.u64(input)),
                 tlvStream = TlvStreamSerializer(false, readers).read(input),
             )
         }
