@@ -38,13 +38,16 @@ object TestConstants {
         TrampolineFees(5.sat, 1200, CltvExpiryDelta(576))
     )
 
-    val leaseRate = LiquidityAds.LeaseRate(
-        leaseDuration = 0,
-        fundingWeight = 500,
-        leaseFeeProportional = 100, // 1%
-        leaseFeeBase = 0.sat,
-        maxRelayFeeProportional = 50, // 0.5%
-        maxRelayFeeBase = 1_000.msat,
+    val fundingRates = LiquidityAds.WillFundRates(
+        fundingRates = listOf(
+            LiquidityAds.FundingLease.Basic(100_000.sat, 500_000.sat, LiquidityAds.LeaseRate(500, 0.sat, 100)),
+            LiquidityAds.FundingLease.Basic(500_000.sat, 10_000_000.sat, LiquidityAds.LeaseRate(750, 0.sat, 100))
+        ),
+        paymentTypes = setOf(
+            LiquidityAds.PaymentType.FromChannelBalance,
+            LiquidityAds.PaymentType.FromFutureHtlc,
+            LiquidityAds.PaymentType.FromFutureHtlcWithPreimage
+        )
     )
 
     const val aliceSwapInServerXpub = "tpubDCvYeHUZisCMVTSfWDa1yevTf89NeF6TWxXUQwqkcmFrNvNdNvZQh1j4m4uTA4QcmPEwcrKVF8bJih1v16zDZacRr4j9MCAFQoSydKKy66q"
@@ -96,7 +99,7 @@ object TestConstants {
             paymentRecipientExpiryParams = RecipientCltvExpiryParams(CltvExpiryDelta(0), CltvExpiryDelta(0)),
         )
 
-        fun channelParams(): LocalParams = LocalParams(nodeParams, isChannelOpener = true, payCommitTxFees = true)
+        fun channelParams(payCommitTxFees: Boolean): LocalParams = LocalParams(nodeParams, isChannelOpener = true, payCommitTxFees = payCommitTxFees)
     }
 
     object Bob {
@@ -127,7 +130,7 @@ object TestConstants {
             paymentRecipientExpiryParams = RecipientCltvExpiryParams(CltvExpiryDelta(0), CltvExpiryDelta(0)),
         )
 
-        fun channelParams(): LocalParams = LocalParams(nodeParams, isChannelOpener = false, payCommitTxFees = false)
+        fun channelParams(payCommitTxFees: Boolean): LocalParams = LocalParams(nodeParams, isChannelOpener = false, payCommitTxFees = payCommitTxFees)
     }
 
 }

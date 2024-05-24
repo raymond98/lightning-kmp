@@ -65,6 +65,7 @@
     JsonSerializers.SpliceStatusSerializer::class,
     JsonSerializers.LiquidityLeaseFeesSerializer::class,
     JsonSerializers.LiquidityLeaseWitnessSerializer::class,
+    JsonSerializers.LiquidityPaymentDetailsSerializer::class,
     JsonSerializers.LiquidityLeaseSerializer::class,
     JsonSerializers.ChannelFlagsSerializer::class,
     JsonSerializers.ChannelParamsSerializer::class,
@@ -291,8 +292,11 @@ object JsonSerializers {
     @Serializer(forClass = LiquidityAds.LeaseFees::class)
     object LiquidityLeaseFeesSerializer
 
-    @Serializer(forClass = LiquidityAds.LeaseWitness::class)
+    @Serializer(forClass = LiquidityAds.FundingLeaseWitness::class)
     object LiquidityLeaseWitnessSerializer
+
+    @Serializer(forClass = LiquidityAds.PaymentDetails::class)
+    object LiquidityPaymentDetailsSerializer
 
     @Serializer(forClass = LiquidityAds.Lease::class)
     object LiquidityLeaseSerializer
