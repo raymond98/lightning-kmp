@@ -419,6 +419,7 @@ object Deserialization {
                 0x00 -> LiquidityAds.PaymentDetails.FromChannelBalance
                 0x80 -> LiquidityAds.PaymentDetails.FromFutureHtlc(readCollection { readByteVector32() }.toList())
                 0x81 -> LiquidityAds.PaymentDetails.FromFutureHtlcWithPreimage(readCollection { readByteVector32() }.toList())
+                0x82 -> LiquidityAds.PaymentDetails.FromFeeCredit
                 else -> error("unknown discriminator $paymentDetailsDiscriminator for class ${LiquidityAds.PaymentDetails::class}")
             },
             sellerSig = readByteVector64(),

@@ -840,6 +840,29 @@ class LightningCodecsTestsCommon : LightningTestSuite() {
     }
 
     @Test
+    fun `encode - decode fee credit messages`() {
+        val preimages = listOf(
+            ByteVector32("6962570ba49642729d77020821f55a492f5df092f3777e75f9740e5b6efec08f"),
+            ByteVector32("4ad834d418faf74ebf7c8a026f2767a41c3a0995c334d7d3dab47737794b0c16")
+        )
+        val testCases = listOf(
+            // @formatter:off
+            AddFeeCredit(Block.RegtestGenesisBlock.hash, preimages.first()) to Hex.decode("a055 06226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f 6962570ba49642729d77020821f55a492f5df092f3777e75f9740e5b6efec08f"),
+            CurrentFeeCredit(Block.RegtestGenesisBlock.hash, 0.msat) to Hex.decode("a056 06226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f 0000000000000000"),
+            CurrentFeeCredit(Block.RegtestGenesisBlock.hash, 20_000_000.msat) to Hex.decode("a056 06226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f 0000000001312d00"),
+            CurrentFeeCredit(Block.RegtestGenesisBlock.hash, 25_000_000.msat, preimages) to Hex.decode("a056 06226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f 00000000017d7840 01406962570ba49642729d77020821f55a492f5df092f3777e75f9740e5b6efec08f4ad834d418faf74ebf7c8a026f2767a41c3a0995c334d7d3dab47737794b0c16"),
+            // @formatter:on
+        )
+        testCases.forEach {
+            val decoded = LightningMessage.decode(it.second)
+            assertNotNull(decoded)
+            assertEquals(it.first, decoded)
+            val encoded = LightningMessage.encode(decoded)
+            assertArrayEquals(it.second, encoded)
+        }
+    }
+
+    @Test
     fun `encode - decode phoenix-android-legacy-info messages`() {
         val testCases = listOf(
             Pair(PhoenixAndroidLegacyInfo(hasChannels = true), Hex.decode("88cfff")),

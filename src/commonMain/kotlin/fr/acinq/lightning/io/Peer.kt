@@ -211,6 +211,7 @@ class Peer(
     val currentTipFlow = MutableStateFlow<Int?>(null)
     val onChainFeeratesFlow = MutableStateFlow<OnChainFeerates?>(null)
     val peerFeeratesFlow = MutableStateFlow<RecommendedFeerates?>(null)
+    val feeCreditFlow = MutableStateFlow<MilliSatoshi>(0.msat)
 
     private val _channelLogger = nodeParams.loggerFactory.newLogger(ChannelState::class)
     private suspend fun ChannelState.process(cmd: ChannelCommand): Pair<ChannelState, List<ChannelAction>> {
@@ -720,9 +721,13 @@ class Peer(
         peerConnection?.send(message)
     }
 
-    /** Return true if we are currently funding a channel. */
+    /**
+     * Return true if we are currently funding a channel.
+     * Note that we also return true if we haven't yet received the remote [TxSignatures] for the latest splice transaction.
+     * Since our peer sends [CurrentFeeCredit] before [TxSignatures], this ensures that we never over-estimate our fee credit when initiating a funding flow.
+     */
     private fun channelFundingIsInProgress(): Boolean = when (val channel = _channels.values.firstOrNull { it is Normal }) {
-        is Normal -> channel.spliceStatus != SpliceStatus.None
+        is Normal -> channel.spliceStatus != SpliceStatus.None || channel.commitments.latest.localFundingStatus.signedTx == null
         else -> _channels.values.any { it is WaitForAcceptChannel || it is WaitForFundingCreated || it is WaitForFundingSigned || it is WaitForFundingConfirmed || it is WaitForChannelReady }
     }
 
@@ -865,9 +870,10 @@ class Peer(
     private suspend fun processIncomingPayment(item: Either<WillAddHtlc, UpdateAddHtlc>) {
         val currentBlockHeight = currentTipFlow.filterNotNull().first()
         val currentFeerate = peerFeeratesFlow.filterNotNull().first().fundingFeerate
+        val currentFeeCredit = feeCreditFlow.first()
         val result = when (item) {
-            is Either.Right -> incomingPaymentHandler.process(item.value, currentBlockHeight, currentFeerate)
-            is Either.Left -> incomingPaymentHandler.process(item.value, currentBlockHeight, currentFeerate)
+            is Either.Right -> incomingPaymentHandler.process(item.value, currentBlockHeight, currentFeerate, currentFeeCredit)
+            is Either.Left -> incomingPaymentHandler.process(item.value, currentBlockHeight, currentFeerate, currentFeeCredit)
         }
         when (result) {
             is IncomingPaymentHandler.ProcessAddResult.Accepted -> {
@@ -971,6 +977,12 @@ class Peer(
                                     state1
                                 }
                             }
+                        }
+                    }
+                    is CurrentFeeCredit -> {
+                        when {
+                            nodeParams.features.hasFeature(Feature.FundingFeeCredit) -> feeCreditFlow.value = msg.amount
+                            else -> {}
                         }
                     }
                     is Ping -> {
@@ -1276,6 +1288,7 @@ class Peer(
             is OpenOrSplicePayment -> {
                 val channel = channels.values.firstOrNull { it is Normal }
                 val currentFeerates = peerFeeratesFlow.filterNotNull().first()
+                val currentFeeCredit = feeCreditFlow.first().truncateToSatoshi()
                 when {
                     channelFundingIsInProgress() -> {
                         // Once the channel funding is complete, we may have enough inbound liquidity to receive the payment without an on-chain operation
@@ -1303,8 +1316,9 @@ class Peer(
                                     // We must cover the shared input and the shared output, which is a lot of weight, so we add 50%.
                                     else -> fundingFeerate * 1.5
                                 }
-                                // We cannot pay the liquidity fees from our channel balance, so we fall back to future HTLCs.
+                                // We cannot pay the liquidity fees from our channel balance, so we fall back to future HTLCs or fee credit.
                                 val paymentDetails = when {
+                                    remoteFundingRates.paymentTypes.contains(LiquidityAds.PaymentType.FromFeeCredit) && cmd.leaseFees(targetFeerate).total <= currentFeeCredit -> LiquidityAds.PaymentDetails.FromFeeCredit
                                     remoteFundingRates.paymentTypes.contains(LiquidityAds.PaymentType.FromFutureHtlc) -> LiquidityAds.PaymentDetails.FromFutureHtlc(listOf(cmd.paymentHash))
                                     remoteFundingRates.paymentTypes.contains(LiquidityAds.PaymentType.FromFutureHtlcWithPreimage) -> LiquidityAds.PaymentDetails.FromFutureHtlcWithPreimage(listOf(cmd.preimage))
                                     else -> null
@@ -1347,8 +1361,9 @@ class Peer(
                         // We don't pay any local on-chain fees, our fee is only for the liquidity lease.
                         val leaseFees = cmd.leaseFees(fundingFeerate)
                         val totalFees = TransactionFees(miningFee = leaseFees.miningFee, serviceFee = leaseFees.serviceFee)
-                        // We cannot pay the liquidity fees from our channel balance, so we fall back to future HTLCs.
+                        // We cannot pay the liquidity fees from our channel balance, so we fall back to future HTLCs or fee credit.
                         val paymentDetails = when {
+                            remoteFundingRates.paymentTypes.contains(LiquidityAds.PaymentType.FromFeeCredit) && leaseFees.total <= currentFeeCredit -> LiquidityAds.PaymentDetails.FromFeeCredit
                             remoteFundingRates.paymentTypes.contains(LiquidityAds.PaymentType.FromFutureHtlc) -> LiquidityAds.PaymentDetails.FromFutureHtlc(listOf(cmd.paymentHash))
                             remoteFundingRates.paymentTypes.contains(LiquidityAds.PaymentType.FromFutureHtlcWithPreimage) -> LiquidityAds.PaymentDetails.FromFutureHtlcWithPreimage(listOf(cmd.preimage))
                             else -> null

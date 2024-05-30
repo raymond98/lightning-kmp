@@ -425,6 +425,7 @@ object Serialization {
                 write(0x81)
                 writeCollection(lease.paymentDetails.preimages) { writeByteVector32(it) }
             }
+            is LiquidityAds.PaymentDetails.FromFeeCredit -> write(0x82)
         }
         writeByteVector64(lease.sellerSig)
         when (lease.witness) {

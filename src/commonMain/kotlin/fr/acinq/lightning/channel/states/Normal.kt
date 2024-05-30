@@ -862,6 +862,8 @@ data class Normal(
                 // Fees don't need to be paid during the splice, they will be deducted from relayed HTLCs.
                 is LiquidityAds.PaymentDetails.FromFutureHtlc -> true
                 is LiquidityAds.PaymentDetails.FromFutureHtlcWithPreimage -> true
+                // Fees don't need to be paid during the splice, they are taken from our fee credit.
+                is LiquidityAds.PaymentDetails.FromFeeCredit -> true
             }
         }
     }

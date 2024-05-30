@@ -150,6 +150,8 @@ object LiquidityAds {
         data object FromFutureHtlc : PaymentType()
         /** Fees will be deducted from future HTLCs that will be relayed to the buyer, but the preimage is revealed immediately. */
         data object FromFutureHtlcWithPreimage : PaymentType()
+        /** Fees will be taken from the buyer's current fee credit. */
+        data object FromFeeCredit : PaymentType()
         /** Sellers may support unknown payment types, which we must ignore. */
         data class Unknown(val bitIndex: Int) : PaymentType()
 
@@ -160,6 +162,7 @@ object LiquidityAds {
                         is FromChannelBalance -> 0
                         is FromFutureHtlc -> 128
                         is FromFutureHtlcWithPreimage -> 129
+                        is FromFeeCredit -> 130
                         is Unknown -> it.bitIndex
                     }
                 }
@@ -174,6 +177,7 @@ object LiquidityAds {
                         it.value && it.index == 0 -> FromChannelBalance
                         it.value && it.index == 128 -> FromFutureHtlc
                         it.value && it.index == 129 -> FromFutureHtlcWithPreimage
+                        it.value && it.index == 130 -> FromFeeCredit
                         it.value -> Unknown(it.index)
                         else -> null
                     }
@@ -190,6 +194,7 @@ object LiquidityAds {
         data object FromChannelBalance : PaymentDetails() { override val paymentType: PaymentType = PaymentType.FromChannelBalance }
         data class FromFutureHtlc(val paymentHashes: List<ByteVector32>) : PaymentDetails() { override val paymentType: PaymentType = PaymentType.FromFutureHtlc }
         data class FromFutureHtlcWithPreimage(val preimages: List<ByteVector32>) : PaymentDetails() { override val paymentType: PaymentType = PaymentType.FromFutureHtlcWithPreimage }
+        data object FromFeeCredit : PaymentDetails() { override val paymentType: PaymentType = PaymentType.FromFeeCredit }
         // @formatter:on
 
         fun write(out: Output) = when (this) {
@@ -206,6 +211,10 @@ object LiquidityAds {
                 LightningCodecs.writeBigSize(129, out) // tag
                 LightningCodecs.writeBigSize(32 * preimages.size.toLong(), out) // length
                 preimages.forEach { LightningCodecs.writeBytes(it, out) }
+            }
+            is FromFeeCredit -> {
+                LightningCodecs.writeBigSize(130, out) // tag
+                LightningCodecs.writeBigSize(0, out) // length
             }
         }
 
@@ -224,6 +233,10 @@ object LiquidityAds {
                     val count = LightningCodecs.bigSize(input) / 32
                     val preimages = (0 until count).map { LightningCodecs.bytes(input, 32).byteVector32() }
                     FromFutureHtlcWithPreimage(preimages)
+                }
+                130L -> {
+                    require(LightningCodecs.bigSize(input) == 0L) { "invalid length for from_fee_credit payment details" }
+                    FromFeeCredit
                 }
                 else -> throw IllegalArgumentException("unknown payment details (tag=$tag)")
             }

@@ -1075,6 +1075,8 @@ data class InteractiveTxSigningSession(
                     // Fees will be paid later, from relayed HTLCs.
                     is LiquidityAds.PaymentDetails.FromFutureHtlc -> 0.msat
                     is LiquidityAds.PaymentDetails.FromFutureHtlcWithPreimage -> 0.msat
+                    // Fees are taken from the current fee credit.
+                    is LiquidityAds.PaymentDetails.FromFeeCredit -> 0.msat
                 }
             } ?: 0.msat
             return Helpers.Funding.makeCommitTxs(

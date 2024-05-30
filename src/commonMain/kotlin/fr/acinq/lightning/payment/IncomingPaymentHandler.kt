@@ -150,22 +150,26 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val db: PaymentsDb, pri
     }
 
     /** Process an incoming htlc. Before calling this, the htlc must be committed and ack-ed by both peers. */
-    suspend fun process(htlc: UpdateAddHtlc, currentBlockHeight: Int, currentFeerate: FeeratePerKw): ProcessAddResult = process(Either.Right(htlc), currentBlockHeight, currentFeerate)
+    suspend fun process(htlc: UpdateAddHtlc, currentBlockHeight: Int, currentFeerate: FeeratePerKw, currentFeeCredit: MilliSatoshi = 0.msat): ProcessAddResult {
+        return process(Either.Right(htlc), currentBlockHeight, currentFeerate, currentFeeCredit)
+    }
 
     /** Process an incoming on-the-fly funding request. */
-    suspend fun process(htlc: WillAddHtlc, currentBlockHeight: Int, currentFeerate: FeeratePerKw): ProcessAddResult = process(Either.Left(htlc), currentBlockHeight, currentFeerate)
+    suspend fun process(htlc: WillAddHtlc, currentBlockHeight: Int, currentFeerate: FeeratePerKw, currentFeeCredit: MilliSatoshi = 0.msat): ProcessAddResult {
+        return process(Either.Left(htlc), currentBlockHeight, currentFeerate, currentFeeCredit)
+    }
 
-    private suspend fun process(htlc: Either<WillAddHtlc, UpdateAddHtlc>, currentBlockHeight: Int, currentFeerate: FeeratePerKw): ProcessAddResult {
+    private suspend fun process(htlc: Either<WillAddHtlc, UpdateAddHtlc>, currentBlockHeight: Int, currentFeerate: FeeratePerKw, currentFeeCredit: MilliSatoshi): ProcessAddResult {
         // There are several checks we could perform *before* decrypting the onion.
         // But we need to carefully handle which error message is returned to prevent information leakage, so we always peel the onion first.
         return when (val res = toPaymentPart(privateKey, htlc)) {
             is Either.Left -> res.value
-            is Either.Right -> processPaymentPart(res.value, currentBlockHeight, currentFeerate)
+            is Either.Right -> processPaymentPart(res.value, currentBlockHeight, currentFeerate, currentFeeCredit)
         }
     }
 
     /** Main payment processing, that handles payment parts. */
-    private suspend fun processPaymentPart(paymentPart: PaymentPart, currentBlockHeight: Int, currentFeerate: FeeratePerKw): ProcessAddResult {
+    private suspend fun processPaymentPart(paymentPart: PaymentPart, currentBlockHeight: Int, currentFeerate: FeeratePerKw, currentFeeCredit: MilliSatoshi): ProcessAddResult {
         val logger = MDCLogger(logger.logger, staticMdc = paymentPart.mdc())
         when (paymentPart) {
             is HtlcPart -> logger.info { "processing htlc part expiry=${paymentPart.htlc.cltvExpiry}" }
@@ -231,33 +235,62 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val db: PaymentsDb, pri
                             val willAddHtlcParts = payment.parts.filterIsInstance<WillAddHtlcPart>()
                             when {
                                 willAddHtlcParts.isNotEmpty() -> when (val result = validateOnTheFlyFundingRate(willAddHtlcParts.map { it.amount }.sum(), currentFeerate)) {
-                                    is Either.Left -> {
-                                        logger.warning { "rejecting on-the-fly funding: reason=${result.value.reason}" }
-                                        nodeParams._nodeEvents.emit(result.value)
-                                        pending.remove(paymentPart.paymentHash)
-                                        val actions = payment.parts.map { part ->
-                                            when (part) {
-                                                is HtlcPart -> actionForFailureMessage(TemporaryNodeFailure, part.htlc)
-                                                is WillAddHtlcPart -> actionForWillAddHtlcFailure(nodeParams.nodePrivateKey, TemporaryNodeFailure, part.htlc)
-                                            }
-                                        }
-                                        ProcessAddResult.Rejected(actions, incomingPayment)
-                                    }
+                                    is Either.Left -> rejectOnTheFlyFunding(payment, incomingPayment, result.value)
                                     is Either.Right -> {
                                         val (requestedAmount, fundingRate) = result.value
-                                        val actions = listOf(OpenOrSplicePayment(payment.amountReceived, requestedAmount, fundingRate, incomingPayment.preimage))
-                                        val paymentOnlyHtlcs = payment.copy(
-                                            // We need to splice before receiving the remaining HTLC parts.
-                                            // We extend the duration of the MPP timeout to give more time for funding to complete.
-                                            startedAtSeconds = payment.startedAtSeconds + 30,
-                                            // We keep the currently added HTLCs, and should receive the remaining HTLCs after the open/splice.
-                                            parts = htlcParts.toSet()
-                                        )
-                                        when {
-                                            paymentOnlyHtlcs.parts.isNotEmpty() -> pending[paymentPart.paymentHash] = paymentOnlyHtlcs
-                                            else -> pending.remove(paymentPart.paymentHash)
+                                        val addToFeeCredit = run {
+                                            val featureOk = nodeParams.features.hasFeature(Feature.FundingFeeCredit)
+                                            val remoteNodeOk = remoteFundingRates.paymentTypes.contains(LiquidityAds.PaymentType.FromFeeCredit)
+                                            // We use an arbitrary threshold that is higher than just the current liquidity fees.
+                                            // This reduces the frequency of on-chain operations for payments that are about the size of the fees.
+                                            // It also ensures that if we end up splicing with a higher feerate because we have unconfirmed parent
+                                            // transactions, we will have enough fee credit to cover this higher feerate.
+                                            val feeCreditThreshold = fundingRate.fees(currentFeerate, requestedAmount, requestedAmount).total * 5
+                                            val amountBelowThreshold = (payment.amountReceived + currentFeeCredit).truncateToSatoshi() < feeCreditThreshold
+                                            featureOk && remoteNodeOk && amountBelowThreshold
                                         }
-                                        ProcessAddResult.Pending(incomingPayment, paymentOnlyHtlcs, actions)
+                                        when {
+                                            addToFeeCredit -> {
+                                                logger.info { "adding on-the-fly funding to fee credit (amount=${willAddHtlcParts.map { it.amount }.sum()})" }
+                                                val receivedWith = buildList {
+                                                    htlcParts.forEach { add(IncomingPayment.ReceivedWith.LightningPayment(it.amount, it.htlc.channelId, it.htlc.id, it.htlc.fundingFee)) }
+                                                    willAddHtlcParts.forEach { add(IncomingPayment.ReceivedWith.AddedToFeeCredit(it.amount)) }
+                                                }
+                                                val actions = buildList {
+                                                    // We send a single add_fee_credit for the will_add_htlc set.
+                                                    add(SendOnTheFlyFundingMessage(AddFeeCredit(nodeParams.chainHash, incomingPayment.preimage)))
+                                                    htlcParts.forEach { add(WrappedChannelCommand(it.htlc.channelId, ChannelCommand.Htlc.Settlement.Fulfill(it.htlc.id, incomingPayment.preimage, true))) }
+                                                }
+                                                acceptPayment(incomingPayment, receivedWith, actions)
+                                            }
+                                            else -> {
+                                                // We're not adding to our fee credit, so we need to check our liquidity policy.
+                                                // Even if we have enough fee credit to pay the fees, we may want to wait for a lower feerate.
+                                                when (val rejected = nodeParams.liquidityPolicy.value.maybeReject(
+                                                    requestedAmount.toMilliSatoshi(),
+                                                    fundingRate.fees(currentFeerate, requestedAmount, requestedAmount).total.toMilliSatoshi(),
+                                                    LiquidityEvents.Source.OffChainPayment,
+                                                    logger
+                                                )) {
+                                                    is LiquidityEvents.Rejected -> rejectOnTheFlyFunding(payment, incomingPayment, rejected)
+                                                    else -> {
+                                                        val actions = listOf(OpenOrSplicePayment(payment.amountReceived, requestedAmount, fundingRate, incomingPayment.preimage))
+                                                        val paymentOnlyHtlcs = payment.copy(
+                                                            // We need to splice before receiving the remaining HTLC parts.
+                                                            // We extend the duration of the MPP timeout to give more time for funding to complete.
+                                                            startedAtSeconds = payment.startedAtSeconds + 30,
+                                                            // We keep the currently added HTLCs, and should receive the remaining HTLCs after the open/splice.
+                                                            parts = htlcParts.toSet()
+                                                        )
+                                                        when {
+                                                            paymentOnlyHtlcs.parts.isNotEmpty() -> pending[paymentPart.paymentHash] = paymentOnlyHtlcs
+                                                            else -> pending.remove(paymentPart.paymentHash)
+                                                        }
+                                                        ProcessAddResult.Pending(incomingPayment, paymentOnlyHtlcs, actions)
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 else -> when (val fundingFee = validateFundingFee(htlcParts)) {
@@ -269,21 +302,12 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val db: PaymentsDb, pri
                                         ProcessAddResult.Rejected(actions, incomingPayment)
                                     }
                                     is Either.Right -> {
-                                        pending.remove(paymentPart.paymentHash)
                                         val receivedWith = htlcParts.map { part -> IncomingPayment.ReceivedWith.LightningPayment(part.amount, part.htlc.channelId, part.htlc.id, part.htlc.fundingFee) }
-                                        val received = IncomingPayment.Received(receivedWith = receivedWith)
                                         val actions = htlcParts.map { part ->
                                             val cmd = ChannelCommand.Htlc.Settlement.Fulfill(part.htlc.id, incomingPayment.preimage, true)
                                             WrappedChannelCommand(part.htlc.channelId, cmd)
                                         }
-                                        if (incomingPayment.origin is IncomingPayment.Origin.Offer) {
-                                            // We didn't store the Bolt 12 invoice in our DB when receiving the invoice_request (to protect against DoS).
-                                            // We need to create the DB entry now otherwise the payment won't be recorded.
-                                            db.addIncomingPayment(incomingPayment.preimage, incomingPayment.origin)
-                                        }
-                                        db.receivePayment(paymentPart.paymentHash, received.receivedWith)
-                                        nodeParams._nodeEvents.emit(PaymentEvents.PaymentReceived(paymentPart.paymentHash, received.receivedWith))
-                                        ProcessAddResult.Accepted(actions, incomingPayment.copy(received = received), received)
+                                        acceptPayment(incomingPayment, receivedWith, actions)
                                     }
                                 }
                             }
@@ -307,6 +331,9 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val db: PaymentsDb, pri
                     else -> {
                         val fees = fundingRate.fees(currentFeerate, requestedAmount, requestedAmount).total
                         val rejected = when {
+                            // We never reject if we can use the fee credit feature.
+                            // We instead add payments to our fee credit until making an on-chain operation becomes acceptable.
+                            nodeParams.features.hasFeature(Feature.FundingFeeCredit) && remoteFundingRates.paymentTypes.contains(LiquidityAds.PaymentType.FromFeeCredit) -> null
                             // We only initiate on-the-fly funding if the missing amount is greater than the fees paid.
                             // Otherwise our peer may not be able to claim the funding fees from the relayed HTLCs.
                             willAddHtlcAmount < fees * 2 -> LiquidityEvents.Rejected(
@@ -327,6 +354,19 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val db: PaymentsDb, pri
         }
     }
 
+    private suspend fun rejectOnTheFlyFunding(payment: PendingPayment, incomingPayment: IncomingPayment, rejected: LiquidityEvents.Rejected): ProcessAddResult.Rejected {
+        logger.warning { "rejecting on-the-fly funding: reason=${rejected.reason}" }
+        pending.remove(incomingPayment.paymentHash)
+        nodeParams._nodeEvents.emit(rejected)
+        val actions = payment.parts.map { part ->
+            when (part) {
+                is HtlcPart -> actionForFailureMessage(TemporaryNodeFailure, part.htlc)
+                is WillAddHtlcPart -> actionForWillAddHtlcFailure(nodeParams.nodePrivateKey, TemporaryNodeFailure, part.htlc)
+            }
+        }
+        return ProcessAddResult.Rejected(actions, incomingPayment)
+    }
+
     private suspend fun validateFundingFee(parts: List<HtlcPart>): Either<ChannelException, LiquidityAds.FundingFee?> {
         return when (val fundingTxId = parts.map { it.htlc.fundingFee?.fundingTxId }.firstOrNull()) {
             is TxId -> {
@@ -340,6 +380,7 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val db: PaymentsDb, pri
                             is LiquidityAds.PaymentDetails.FromFutureHtlc -> details.paymentHashes.contains(paymentHash)
                             is LiquidityAds.PaymentDetails.FromFutureHtlcWithPreimage -> details.preimages.any { Crypto.sha256(it).byteVector32() == paymentHash }
                             is LiquidityAds.PaymentDetails.FromChannelBalance -> false
+                            is LiquidityAds.PaymentDetails.FromFeeCredit -> false
                         }
                         val feeAmountOk = fundingFee <= lease.fees.total.toMilliSatoshi()
                         when {
@@ -351,6 +392,19 @@ class IncomingPaymentHandler(val nodeParams: NodeParams, val db: PaymentsDb, pri
             }
             else -> Either.Right(null)
         }
+    }
+
+    private suspend fun acceptPayment(incomingPayment: IncomingPayment, receivedWith: List<IncomingPayment.ReceivedWith>, actions: List<PeerCommand>): ProcessAddResult.Accepted {
+        pending.remove(incomingPayment.paymentHash)
+        if (incomingPayment.origin is IncomingPayment.Origin.Offer) {
+            // We didn't store the Bolt 12 invoice in our DB when receiving the invoice_request (to protect against DoS).
+            // We need to create the DB entry now otherwise the payment won't be recorded.
+            db.addIncomingPayment(incomingPayment.preimage, incomingPayment.origin)
+        }
+        db.receivePayment(incomingPayment.paymentHash, receivedWith)
+        nodeParams._nodeEvents.emit(PaymentEvents.PaymentReceived(incomingPayment.paymentHash, receivedWith))
+        val received = IncomingPayment.Received(receivedWith)
+        return ProcessAddResult.Accepted(actions, incomingPayment.copy(received = received), received)
     }
 
     private suspend fun validatePaymentPart(paymentPart: PaymentPart, currentBlockHeight: Int): Either<ProcessAddResult.Rejected, IncomingPayment> {
