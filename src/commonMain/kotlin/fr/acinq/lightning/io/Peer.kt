@@ -235,12 +235,13 @@ class Peer(
             when (client) {
                 is IElectrumClient -> client.notifications.filterIsInstance<HeaderSubscriptionResponse>()
                     .collect { msg ->
+                        logger.info { "current block height is $msg.blockHeight" }
                         currentTipFlow.value = msg.blockHeight to msg.header
                     }
                 is MempoolSpaceClient -> while (true) {
                     runCatching {
                         client.getBlockTipHeight()?.let { currentBlockHeight ->
-                            logger.debug { "current block height is $currentBlockHeight" }
+                            logger.info { "current block height is $currentBlockHeight" }
                             currentTipFlow.value = currentBlockHeight to BlockHeader(0, BlockHash(ByteVector32.Zeroes), ByteVector32.Zeroes, 0, 0, 0)
                         }
                     }
@@ -263,11 +264,13 @@ class Peer(
                         fastFeerate = (client.estimateFees(2) ?: onChainFeeratesFlow.value?.fastFeerate) ?: FeeratePerKw(FeeratePerByte(50.sat))
                     )
                     logger.info { "on-chain fees: $onChainFeerates" }
+                    swapInFeeratesFlow.value = FeeratePerKw(onChainFeerates.fastFeerate.feerate)
                     onChainFeeratesFlow.value = onChainFeerates
                 }
                 is MempoolSpaceClient -> while (true) {
                     val onChainFeerates = client.getFeerates()?.let { feerates ->
                         logger.info { "on-chain fees: $feerates" }
+                        swapInFeeratesFlow.value = FeeratePerKw(feerates.fastest)
                         OnChainFeerates(
                             fundingFeerate = FeeratePerKw(feerates.slow),
                             mutualCloseFeerate = FeeratePerKw(feerates.medium),
@@ -497,12 +500,20 @@ class Peer(
         }
         logger.info { "waiting for peer to be ready" }
         waitForPeerReady()
+        logger.info { "Swap-in Job Started" }
         swapInJob = launch {
             swapInWallet.wallet.walletStateFlow
-                .combine(currentTipFlow.filterNotNull()) { walletState, currentTip -> Pair(walletState, currentTip.first) }
-                .combine(swapInFeeratesFlow.filterNotNull()) { (walletState, currentTip), feerate -> Triple(walletState, currentTip, feerate) }
-                .combine(nodeParams.liquidityPolicy) { (walletState, currentTip, feerate), policy -> TrySwapInFlow(currentTip, walletState, feerate, policy) }
+                .combine(currentTipFlow.filterNotNull()) { walletState, currentTip ->
+                    logger.info { "Processing wallet state and current tip: height=${currentTip}" }
+                    Pair(walletState, currentTip.first) }
+                .combine(swapInFeeratesFlow.filterNotNull()) { (walletState, currentTip), feerate ->
+                    logger.info { "Feerate received for block height ${currentTip}: $feerate" }
+                    Triple(walletState, currentTip, feerate) }
+                .combine(nodeParams.liquidityPolicy) { (walletState, currentTip, feerate), policy ->
+                    logger.info { "Applying liquidity policy at block height $currentTip" }
+                    TrySwapInFlow(currentTip, walletState, feerate, policy) }
                 .collect { w ->
+                    logger.info { "Attempting swap-in at block height ${w.currentBlockHeight}" }
                     // Local mutual close txs from pre-splice channels can be used as zero-conf inputs for swap-in to facilitate migration
                     val mutualCloseTxs = channels.values
                         .filterIsInstance<Closing>()
@@ -512,6 +523,7 @@ class Peer(
                     logger.info { "new swap in command added" }
                     swapInCommands.send(SwapInCommand.TrySwapIn(w.currentBlockHeight, w.walletState, walletParams.swapInParams, trustedTxs))
                 }
+            logger.info { "Swap-in job completed." }
         }
     }
 
